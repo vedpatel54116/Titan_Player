@@ -6,6 +6,7 @@ import CoreMedia
 class MediaPipeline: ObservableObject {
     @Published var playState: PlaybackState = .idle
     @Published var mediaInfo: MediaInfo?
+    @Published var playbackRate: Float = 1.0
     
     private var demuxer: MediaDemuxing?
     private var decoder: MediaDecoding?
@@ -17,6 +18,10 @@ class MediaPipeline: ObservableObject {
     var currentTime: Double { timeObserver.currentTime }
     var duration: Double { timeObserver.duration }
     var progress: Double { timeObserver.progress }
+    
+    func setPlaybackRate(_ rate: Float) {
+        playbackRate = max(0.25, min(4.0, rate))
+    }
     
     func openFile(url: URL) async {
         playState = .loading
