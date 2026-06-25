@@ -2,11 +2,27 @@ import Metal
 import MetalKit
 import CoreVideo
 
-class MetalRenderer {
+class MetalRenderer: NSObject, MTKViewDelegate {
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
-    private var pipelineState: MTLRenderPipelineState?
+    
+    private var toneMappingPipeline: MTLComputePipelineState?
+    private var renderPipeline: MTLRenderPipelineState?
+    
+    private var currentHDRMode: HDRMode = .sdr
+    private var displayCapabilities: DisplayCapabilities?
+    private var iccProfile: ICCProfile = .sRGB
+    
+    private var hdrUniformsBuffer: MTLBuffer?
+    private var uniformsBuffer: MTLBuffer?
     private var vertexBuffer: MTLBuffer?
+    
+    private var toneMappedTexture: MTLTexture?
+    
+    private let inFlightSemaphore = DispatchSemaphore(value: 3)
+    private var frameIndex = 0
+    
+    private let displayDetector = DisplayCapabilityDetector()
     
     private let vertexData: [Float] = [
         -1.0, -1.0, 0.0, 1.0,
@@ -15,7 +31,9 @@ class MetalRenderer {
          1.0,  1.0, 1.0, 0.0,
     ]
     
-    init?() {
+    weak var delegate: MetalRendererDelegate?
+    
+    init?(metalView: MTKView) {
         guard let device = MTLCreateSystemDefaultDevice(),
               let commandQueue = device.makeCommandQueue() else {
             return nil
@@ -24,12 +42,23 @@ class MetalRenderer {
         self.device = device
         self.commandQueue = commandQueue
         
-        setupPipeline()
-        setupVertexBuffer()
+        super.init()
+        
+        setupPipelines()
+        setupBuffers()
+        setupMetalView(metalView)
+        
+        if let screen = NSScreen.main {
+            updateDisplayCapabilities(for: screen)
+        }
     }
     
-    private func setupPipeline() {
+    private func setupPipelines() {
         guard let library = device.makeDefaultLibrary() else { return }
+        
+        if let toneMappingFunction = library.makeFunction(name: "hdrToneMapping") {
+            toneMappingPipeline = try? device.makeComputePipelineState(function: toneMappingFunction)
+        }
         
         let vertexFunction = library.makeFunction(name: "vertexShader")
         let fragmentFunction = library.makeFunction(name: "fragmentShader")
@@ -37,49 +66,104 @@ class MetalRenderer {
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.vertexFunction = vertexFunction
         pipelineDescriptor.fragmentFunction = fragmentFunction
-        pipelineDescriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        pipelineDescriptor.colorAttachments[0].pixelFormat = .rgba16Float
         
-        pipelineState = try? device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+        renderPipeline = try? device.makeRenderPipelineState(descriptor: pipelineDescriptor)
     }
     
-    private func setupVertexBuffer() {
+    private func setupBuffers() {
         vertexBuffer = device.makeBuffer(
             bytes: vertexData,
             length: vertexData.count * MemoryLayout<Float>.size,
             options: .storageModeShared
         )
+        
+        hdrUniformsBuffer = device.makeBuffer(
+            length: MemoryLayout<HDRUniforms>.size,
+            options: .storageModeShared
+        )
+        
+        uniformsBuffer = device.makeBuffer(
+            length: MemoryLayout<Uniforms>.size,
+            options: .storageModeShared
+        )
     }
     
-    func render(pixelBuffer: CVPixelBuffer, to drawable: CAMetalDrawable) {
-        guard let commandBuffer = commandQueue.makeCommandBuffer(),
-              let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: createRenderPassDescriptor(drawable: drawable)),
-              let pipelineState = pipelineState,
-              let vertexBuffer = vertexBuffer else {
+    private func setupMetalView(_ metalView: MTKView) {
+        metalView.delegate = self
+        metalView.colorPixelFormat = .rgba16Float
+        metalView.framebufferOnly = false
+        metalView.preferredFramesPerSecond = 60
+    }
+    
+    func updateDisplayCapabilities(for screen: NSScreen) {
+        displayCapabilities = displayDetector.detectCapabilities(for: screen)
+        iccProfile = displayDetector.detectICCProfile(for: screen)
+        
+        if let caps = displayCapabilities {
+            delegate?.renderer(self, didUpdateDisplayCapabilities: caps)
+        }
+    }
+    
+    func updateHDRMode(_ mode: HDRMode) {
+        currentHDRMode = mode
+        delegate?.renderer(self, didDetectHDRMode: mode)
+    }
+    
+    func render(pixelBuffer: CVPixelBuffer, 
+                metadata: HDRMetadata?,
+                to drawable: CAMetalDrawable) {
+        inFlightSemaphore.wait()
+        
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            inFlightSemaphore.signal()
             return
         }
         
-        renderEncoder.setRenderPipelineState(pipelineState)
-        renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
-        
-        // Create texture from pixelBuffer
-        if let texture = createTexture(from: pixelBuffer) {
-            renderEncoder.setFragmentTexture(texture, index: 0)
+        commandBuffer.addCompletedHandler { [weak self] _ in
+            self?.inFlightSemaphore.signal()
         }
         
-        renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-        renderEncoder.endEncoding()
+        guard let inputTexture = createTexture(from: pixelBuffer) else {
+            commandBuffer.commit()
+            return
+        }
+        
+        updateToneMappedTexture(width: inputTexture.width, height: inputTexture.height)
+        
+        guard let outputTexture = toneMappedTexture else {
+            commandBuffer.commit()
+            return
+        }
+        
+        updateHDRUniforms(metadata: metadata)
+        
+        if let computeEncoder = commandBuffer.makeComputeCommandEncoder(),
+           let toneMappingPipeline = toneMappingPipeline {
+            computeEncoder.setComputePipelineState(toneMappingPipeline)
+            computeEncoder.setTexture(inputTexture, index: 0)
+            computeEncoder.setTexture(outputTexture, index: 1)
+            computeEncoder.setBuffer(hdrUniformsBuffer, offset: 0, index: 0)
+            
+            let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
+            let gridSize = MTLSize(width: inputTexture.width, height: inputTexture.height, depth: 1)
+            computeEncoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
+            computeEncoder.endEncoding()
+        }
+        
+        if let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: createRenderPassDescriptor(drawable: drawable)),
+           let renderPipeline = renderPipeline,
+           let vertexBuffer = vertexBuffer {
+            renderEncoder.setRenderPipelineState(renderPipeline)
+            renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+            renderEncoder.setFragmentTexture(outputTexture, index: 0)
+            renderEncoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 0)
+            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            renderEncoder.endEncoding()
+        }
         
         commandBuffer.present(drawable)
         commandBuffer.commit()
-    }
-    
-    private func createRenderPassDescriptor(drawable: CAMetalDrawable) -> MTLRenderPassDescriptor {
-        let descriptor = MTLRenderPassDescriptor()
-        descriptor.colorAttachments[0].texture = drawable.texture
-        descriptor.colorAttachments[0].loadAction = .clear
-        descriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
-        descriptor.colorAttachments[0].storeAction = .store
-        return descriptor
     }
     
     private func createTexture(from pixelBuffer: CVPixelBuffer) -> MTLTexture? {
@@ -93,6 +177,7 @@ class MetalRenderer {
             mipmapped: false
         )
         textureDescriptor.usage = [.shaderRead]
+        textureDescriptor.storageMode = .managed
         
         guard let texture = device.makeTexture(descriptor: textureDescriptor) else { return nil }
         
@@ -112,4 +197,70 @@ class MetalRenderer {
         
         return texture
     }
+    
+    private func updateToneMappedTexture(width: Int, height: Int) {
+        guard toneMappedTexture?.width != width || toneMappedTexture?.height != height else {
+            return
+        }
+        
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba16Float,
+            width: width,
+            height: height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead, .shaderWrite]
+        descriptor.storageMode = .private
+        
+        toneMappedTexture = device.makeTexture(descriptor: descriptor)
+    }
+    
+    private func updateHDRUniforms(metadata: HDRMetadata?) {
+        guard let buffer = hdrUniformsBuffer else { return }
+        
+        var uniforms = HDRUniforms(
+            hdrMode: 0,
+            isHDRDisplay: displayCapabilities?.supportsEDR == true ? 1 : 0,
+            colorMatrix: iccProfile.matrix,
+            maxLuminance: 1000.0,
+            minLuminance: 0.001,
+            maxContentLightLevel: 1000.0,
+            maxFrameAverageLightLevel: 400.0
+        )
+        
+        if let metadata = metadata {
+            switch currentHDRMode {
+            case .hdr10(let hdr10Meta):
+                uniforms.hdrMode = 1
+                uniforms.maxLuminance = hdr10Meta.maxDisplayLuminance
+                uniforms.minLuminance = hdr10Meta.minDisplayLuminance
+                uniforms.maxContentLightLevel = hdr10Meta.maxContentLightLevel
+                uniforms.maxFrameAverageLightLevel = hdr10Meta.maxFrameAverageLightLevel
+            case .hlg:
+                uniforms.hdrMode = 2
+            case .sdr:
+                uniforms.hdrMode = 0
+            }
+        }
+        
+        memcpy(buffer.contents(), &uniforms, MemoryLayout<HDRUniforms>.size)
+    }
+    
+    private func createRenderPassDescriptor(drawable: CAMetalDrawable) -> MTLRenderPassDescriptor {
+        let descriptor = MTLRenderPassDescriptor()
+        descriptor.colorAttachments[0].texture = drawable.texture
+        descriptor.colorAttachments[0].loadAction = .clear
+        descriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+        descriptor.colorAttachments[0].storeAction = .store
+        return descriptor
+    }
+    
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    
+    func draw(in view: MTKView) {}
+}
+
+protocol MetalRendererDelegate: AnyObject {
+    func renderer(_ renderer: MetalRenderer, didDetectHDRMode mode: HDRMode)
+    func renderer(_ renderer: MetalRenderer, didUpdateDisplayCapabilities caps: DisplayCapabilities)
 }
