@@ -42,9 +42,17 @@ struct SubtitleColor {
     static let yellow = SubtitleColor(r: 1, g: 1, b: 0, a: 1)
 }
 
-struct SubtitleTrack {
+struct SubtitleTrack: Hashable {
     let name: String
     let language: String?
     let isDefault: Bool
     let events: [SubtitleEvent]
+    
+    static func == (lhs: SubtitleTrack, rhs: SubtitleTrack) -> Bool {
+        lhs.name == rhs.name
+    }
+    
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(name)
+    }
 }
