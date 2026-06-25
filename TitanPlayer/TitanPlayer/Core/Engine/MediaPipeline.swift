@@ -4,7 +4,7 @@ import CoreMedia
 
 @MainActor
 class MediaPipeline: ObservableObject {
-    @Published var playState: PlayState = .idle
+    @Published var playState: PlaybackState = .idle
     @Published var mediaInfo: MediaInfo?
     
     private var demuxer: MediaDemuxing?

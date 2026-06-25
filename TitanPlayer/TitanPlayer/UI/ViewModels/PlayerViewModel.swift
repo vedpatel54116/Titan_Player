@@ -3,7 +3,7 @@ import Combine
 
 @MainActor
 class PlayerViewModel: ObservableObject {
-    @Published var playState: PlayState = .idle
+    @Published var playState: PlaybackState = .idle
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
     @Published var volume: Float = 1.0
