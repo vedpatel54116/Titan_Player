@@ -16,5 +16,21 @@ struct Uniforms {
     var contrast: Float
     var saturation: Float
     var hue: Float
-    var hdrEnabled: Bool
+    var iccMatrix: simd_float3x3
+}
+
+struct HDRUniforms {
+    var hdrMode: UInt32
+    var isHDRDisplay: UInt32
+    var colorMatrix: simd_float3x3
+    var maxLuminance: Float
+    var minLuminance: Float
+    var maxContentLightLevel: Float
+    var maxFrameAverageLightLevel: Float
+}
+
+enum HDRModeRaw: UInt32 {
+    case sdr = 0
+    case hdr10 = 1
+    case hlg = 2
 }
