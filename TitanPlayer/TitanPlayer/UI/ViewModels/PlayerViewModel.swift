@@ -12,8 +12,10 @@ class PlayerViewModel: ObservableObject {
     @Published var subtitles: [SubtitleTrack] = []
     @Published var activeSubtitle: SubtitleTrack?
     @Published var currentSubtitleEvents: [SubtitleEvent] = []
+    @Published var playbackRate: Float = 1.0
+    @Published var audioDelay: TimeInterval = 0
     
-    private let pipeline = MediaPipeline()
+    private let engine = PlaybackEngine()
     private let subtitleManager = SubtitleManager()
     private var cancellables = Set<AnyCancellable>()
     
@@ -22,13 +24,25 @@ class PlayerViewModel: ObservableObject {
     }
     
     private func setupBindings() {
-        pipeline.$playState
+        engine.$state
             .receive(on: DispatchQueue.main)
             .assign(to: &$playState)
         
-        pipeline.$mediaInfo
+        engine.$currentTime
             .receive(on: DispatchQueue.main)
-            .assign(to: &$mediaInfo)
+            .assign(to: &$currentTime)
+        
+        engine.$duration
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$duration)
+        
+        engine.$playbackRate
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$playbackRate)
+        
+        engine.$audioDelay
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$audioDelay)
         
         subtitleManager.$availableTracks
             .receive(on: DispatchQueue.main)
@@ -44,32 +58,31 @@ class PlayerViewModel: ObservableObject {
     }
     
     func openFile(url: URL) async {
-        await pipeline.openFile(url: url)
-        duration = pipeline.duration
-        
-        // Load embedded subtitles if available
-        try? loadEmbeddedSubtitles(from: url)
+        do {
+            try await engine.load(url: url)
+        } catch {
+            // Error handled by engine.lastError
+        }
     }
     
     func play() {
-        pipeline.play()
+        engine.play()
     }
     
     func pause() {
-        pipeline.pause()
+        engine.pause()
     }
     
     func togglePlayPause() {
         if playState == .playing {
             pause()
-        } else {
+        } else if playState == .ready || playState == .paused {
             play()
         }
     }
     
     func seek(to time: Double) async {
-        await pipeline.seek(to: time)
-        currentTime = time
+        await engine.seek(to: time)
         subtitleManager.update(for: time)
     }
     
@@ -85,10 +98,19 @@ class PlayerViewModel: ObservableObject {
     
     func setVolume(_ volume: Float) {
         self.volume = max(0, min(1, volume))
+        // TODO: Wire to engine when audio output is ready
     }
     
     func toggleMute() {
         isMuted.toggle()
+    }
+    
+    func setPlaybackRate(_ rate: Float) {
+        engine.setPlaybackRate(rate)
+    }
+    
+    func setAudioDelay(_ delay: TimeInterval) {
+        engine.setAudioDelay(delay)
     }
     
     func setSubtitleTrack(_ track: SubtitleTrack?) {
@@ -99,12 +121,8 @@ class PlayerViewModel: ObservableObject {
         try subtitleManager.loadSubtitle(url: url)
     }
     
-    private func loadEmbeddedSubtitles(from url: URL) throws {
-        // Load embedded subtitle tracks
-    }
-    
     func stop() {
-        pipeline.stop()
+        engine.stop()
         subtitleManager.clear()
     }
 }
