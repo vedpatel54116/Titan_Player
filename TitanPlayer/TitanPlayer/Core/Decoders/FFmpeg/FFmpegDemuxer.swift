@@ -50,7 +50,7 @@ class FFmpegDemuxer: MediaDemuxing {
     
     func seek(to time: CMTime) async throws {
         let timestamp = Int64(time.seconds * 600)
-        FFmpegBridge.seekFrame(timestamp: timestamp, flags: 0)
+        _ = FFmpegBridge.seekFrame(timestamp: timestamp, flags: 0)
     }
     
     func close() {
