@@ -16,6 +16,7 @@ class PlaybackEngine: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     
     var onNextTrack: (() async -> URL?)?
+    var onPlaybackEnded: (() -> Void)?
     
     init() {
         setupTimeObserver()
@@ -95,6 +96,16 @@ class PlaybackEngine: ObservableObject {
     
     func setAudioDelay(_ delay: TimeInterval) {
         audioDelay = max(-0.1, min(0.1, delay))
+    }
+    
+    func advanceToNextTrack() async {
+        guard let nextURL = await onNextTrack?() else { return }
+        do {
+            try await load(url: nextURL)
+            play()
+        } catch {
+            // Handle error
+        }
     }
     
     @Published var audioDelay: TimeInterval = 0
