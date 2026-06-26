@@ -14,6 +14,7 @@ class PlayerViewModel: ObservableObject {
     @Published var currentSubtitleEvents: [SubtitleEvent] = []
     @Published var playbackRate: Float = 1.0
     @Published var audioDelay: TimeInterval = 0
+    @Published var renderer: FrameRendering?
     
     private let engine = PlaybackEngine()
     private let subtitleManager = SubtitleManager()
@@ -124,5 +125,10 @@ class PlayerViewModel: ObservableObject {
     func stop() {
         engine.stop()
         subtitleManager.clear()
+    }
+
+    var lastErrorMessage: String? {
+        if case .error(let message) = playState { return message }
+        return nil
     }
 }

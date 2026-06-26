@@ -15,4 +15,18 @@ final class PlayerViewModelTests: XCTestCase {
         vm.togglePlayPause() // Should not crash when idle
         XCTAssertEqual(vm.playState, .idle)
     }
+
+    func testRendererIsNilByDefault() {
+        let vm = PlayerViewModel()
+        XCTAssertNil(vm.renderer)
+    }
+
+    func testRendererCanBeReplaced() {
+        let vm = PlayerViewModel()
+        let mock = MockFrameRenderer()
+        vm.renderer = mock
+        XCTAssertTrue(vm.renderer === mock)
+        vm.renderer = nil
+        XCTAssertNil(vm.renderer)
+    }
 }
