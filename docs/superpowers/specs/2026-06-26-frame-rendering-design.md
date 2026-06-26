@@ -49,7 +49,7 @@ protocol FrameRendering: AnyObject {
 
 ### Method contracts
 
-- `render(_:)`: Accepts a decoded `VideoFrame` and submits it to the implementation's display pipeline. Async because the implementation may call into Metal semaphores that block; throwing so swap-out implementations can surface failures. Implementations may coalesce frames: if a new frame arrives before a drawable is presented, the new frame replaces the queued one (latest-wins backpressure).
+- `render(_:)`: Accepts a decoded `VideoFrame` and submits it to the implementation's display pipeline. Async because the implementation may call into Metal semaphores that block; throwing so swap-out implementations can surface failures. Implementations may coalesce frames: if a new frame arrives before a drawable is presented, the new frame replaces the queued one (latest-wins backpressure). All `FrameRendering` methods are isolated to `@MainActor` (the renderer flushes UI state on each call; `MetalRenderer's draw(in:)` is already called by AppKit on the main thread).
 - `handleHDR(_:)`: Updates HDR mode metadata **without** rendering. Idempotent. Implies `currentHDRMode` already updated by the time the next `render(_:)` executes HDR-uniform update logic.
 - `updateDisplayCapabilities(for:)`: Refreshes display-side state (HDR caps, EDR, ICC profile). Called when the host screen changes. Idempotent.
 - `resetDynamicHDRParams()`: Clears any dynamic tone-mapping overrides so subsequent renders use static metadata only.
@@ -99,7 +99,20 @@ The renderer exposes a single internal "pending frame" slot. When `render(_:)` i
 | `updateDisplayCapabilities(for:)` | Direct proxy to existing method |
 | `resetDynamicHDRParams()`         | Direct proxy              |
 
-`MetalRenderer` no longer throws at init — instead `init()` returns Optional; the protocol conformance uses the optional pattern by exposing a static `make()` factory that constructs + attaches.
+`MetalRenderer.init()` returns Optional. To preserve call-site ergonomics, expose a static factory:
+
+```swift
+extension MetalRenderer {
+    static func make() throws -> MetalRenderer {
+        guard let renderer = MetalRenderer() else {
+            throw RendererError.deviceUnavailable
+        }
+        return renderer
+    }
+}
+```
+
+Callers (`MediaPipeline`) construct via `try MetalRenderer.make()`. Tests construct directly through `init` and accept Optional.
 
 ### Backpressure
 
@@ -257,8 +270,8 @@ Tests verify:
 - [ ] `FrameRenderingProtocolTests`, `MediaPipelineRendererRoutingTests`, `PlayerViewModelRendererTests`, `BackendSwapTests.FrameRenderingSwap` all compile and pass under Xcode 15+
 - [ ] `MetalMtkView` appears in SwiftUI's view tree when `viewModel.renderer != nil`
 - [ ] `MediaPipeline.processFrame(_:)` invokes `renderer.render(_:)` exactly once per `.video` frame
-- [ ] Memory at idle remains <50 MB (`vmmap --summary` Physical footprint)
-- [ ] DRAM-free commit: no method bodies exceed the existing implementation's behavior. Verify by line-count of `MetalRenderer` deltas — net line change must remain under +20% of existing 297-line file.
+- [ ] Memory at idle remains <50 MB (`vmmap --summary` Physical footprint). **Regression check**: must not regress the 27.8 MB baseline measured during the 2026-06-26 validation cycle.
+- [ ] Behavior-preserving refactor: no rendered-frame visual behavior exceeds the existing implementation. Verify by line-count of `MetalRenderer` deltas — net line change must remain under +20% of existing 297-line file.
 
 ---
 
@@ -274,16 +287,18 @@ Tests verify:
 
 ## Implementation Order
 
-1. **Protocol first (TDD):** write `FrameRendering` protocol skeleton; write test asserting one production + one mock conform.
+Each step follows TDD discipline: write the failing test first, then minimal implementation, then verify.
+
+1. **Protocol first (TDD):** write `FrameRendering` protocol skeleton in a placeholder file; write `FrameRenderingProtocolTests` (compile-only) asserting one production + one mock conform; red. Green by adding protocol + mock stubs.
 2. **`RendererError`:** declared alongside the protocol.
-3. **MetalRenderer refactor:** split init, add `attach(to:)`, conform to protocol. Keep gap to existing tests.
-4. **`MockFrameRenderer`:** added in test target.
-5. **MediaPipeline wiring:** property + method dispatch.
-6. **PlayerViewModel property:** add `@Published var renderer`.
+3. **MetalRenderer refactor:** write the unmocked-attach test (verify that `MetalRenderer` instance can be created without a view). Split `init?(metalView:)` into `init()` + `attach(to:)`. Conform `MetalRenderer` to `FrameRendering`. Confirm existing `MetalRendererTests` still pass.
+4. **`MockFrameRenderer`:** add to test target with full conformance + recording.
+5. **MediaPipeline wiring:** Write `MediaPipelineRendererRoutingTests` that injects `MockFrameRenderer` and feeds a synthetic `.video` `MediaFrame`. Make `processFrame(_:)` dispatch.
+6. **PlayerViewModel property:** add `@Published var renderer`. Test that VM exposes it.
 7. **MetalMtkView:** `UIViewRepresentable` wrapper.
-8. **PlayerView integration:** use `MetalMtkView` conditionally.
-9. **BackendSwapTests extension:** add FrameRendering swap case.
-10. **Final `swift build`** verification.
+8. **PlayerView integration:** use `MetalMtkView` conditionally on `viewModel.renderer != nil`.
+9. **BackendSwapTests extension:** add FrameRendering swap case (MetalRenderer ↔ MockFrameRenderer via a `FrameRendering?` slot).
+10. **Final `swift build` + `MetalRendererTests` regression** verification.
 
 ---
 
