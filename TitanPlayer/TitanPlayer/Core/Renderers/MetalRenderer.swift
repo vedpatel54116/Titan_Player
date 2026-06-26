@@ -1,6 +1,7 @@
 import Metal
 import MetalKit
 import CoreVideo
+import simd
 
 class MetalRenderer: NSObject, MTKViewDelegate {
     private let device: MTLDevice
@@ -12,6 +13,13 @@ class MetalRenderer: NSObject, MTKViewDelegate {
     private var currentHDRMode: HDRMode = .sdr
     private var displayCapabilities: DisplayCapabilities?
     private var iccProfile: ICCProfile = .sRGB
+    
+    // Dynamic metadata support
+    private var dynamicKneePoint: Float = 0.0
+    private var dynamicCompressionRatio: Float = 1.0
+    private var dynamicSaturationScale: Float = 1.0
+    private var dynamicBrightnessAdjustment: Float = 0.0
+    private var useDynamicMetadata: Bool = false
     
     private var hdrUniformsBuffer: MTLBuffer?
     private var uniformsBuffer: MTLBuffer?
@@ -33,23 +41,34 @@ class MetalRenderer: NSObject, MTKViewDelegate {
     
     weak var delegate: MetalRendererDelegate?
     
-    init?(metalView: MTKView) {
-        guard let device = MTLCreateSystemDefaultDevice(),
-              let commandQueue = device.makeCommandQueue() else {
-            return nil
-        }
-        
+    override init() {
+        let device = MTLCreateSystemDefaultDevice()!
+        let commandQueue = device.makeCommandQueue()!
         self.device = device
         self.commandQueue = commandQueue
-        
         super.init()
-        
         setupPipelines()
         setupBuffers()
-        setupMetalView(metalView)
-        
         if let screen = NSScreen.main {
-            updateDisplayCapabilities(for: screen)
+            updateDisplayCapabilitiesSynchronously(for: screen)
+        }
+    }
+
+    func attach(to view: MTKView) {
+        view.delegate = self
+        view.colorPixelFormat = .rgba16Float
+        view.framebufferOnly = false
+        view.preferredFramesPerSecond = 60
+    }
+
+    func detach() {
+    }
+
+    func updateDisplayCapabilitiesSynchronously(for screen: NSScreen) {
+        displayCapabilities = displayDetector.detectCapabilities(for: screen)
+        iccProfile = displayDetector.detectICCProfile(for: screen)
+        if let caps = displayCapabilities {
+            delegate?.renderer(self, didUpdateDisplayCapabilities: caps)
         }
     }
     
@@ -89,13 +108,7 @@ class MetalRenderer: NSObject, MTKViewDelegate {
         )
     }
     
-    private func setupMetalView(_ metalView: MTKView) {
-        metalView.delegate = self
-        metalView.colorPixelFormat = .rgba16Float
-        metalView.framebufferOnly = false
-        metalView.preferredFramesPerSecond = 60
-    }
-    
+        
     func updateDisplayCapabilities(for screen: NSScreen) {
         displayCapabilities = displayDetector.detectCapabilities(for: screen)
         iccProfile = displayDetector.detectICCProfile(for: screen)
@@ -108,6 +121,25 @@ class MetalRenderer: NSObject, MTKViewDelegate {
     func updateHDRMode(_ mode: HDRMode) {
         currentHDRMode = mode
         delegate?.renderer(self, didDetectHDRMode: mode)
+    }
+    
+    func updateDynamicHDRParams(kneePoint: Float,
+                                 compressionRatio: Float,
+                                 saturationScale: Float,
+                                 brightnessAdjustment: Float) {
+        dynamicKneePoint = kneePoint
+        dynamicCompressionRatio = compressionRatio
+        dynamicSaturationScale = saturationScale
+        dynamicBrightnessAdjustment = brightnessAdjustment
+        useDynamicMetadata = true
+    }
+    
+    func resetDynamicHDRParams() {
+        dynamicKneePoint = 0.0
+        dynamicCompressionRatio = 1.0
+        dynamicSaturationScale = 1.0
+        dynamicBrightnessAdjustment = 0.0
+        useDynamicMetadata = false
     }
     
     func render(pixelBuffer: CVPixelBuffer, 
@@ -225,7 +257,12 @@ class MetalRenderer: NSObject, MTKViewDelegate {
             maxLuminance: 1000.0,
             minLuminance: 0.001,
             maxContentLightLevel: 1000.0,
-            maxFrameAverageLightLevel: 400.0
+            maxFrameAverageLightLevel: 400.0,
+            kneePoint: dynamicKneePoint,
+            compressionRatio: dynamicCompressionRatio,
+            saturationScale: dynamicSaturationScale,
+            brightnessAdjustment: dynamicBrightnessAdjustment,
+            useDynamicMetadata: useDynamicMetadata ? 1 : 0
         )
         
         if let metadata = metadata {
@@ -263,4 +300,14 @@ class MetalRenderer: NSObject, MTKViewDelegate {
 protocol MetalRendererDelegate: AnyObject {
     func renderer(_ renderer: MetalRenderer, didDetectHDRMode mode: HDRMode)
     func renderer(_ renderer: MetalRenderer, didUpdateDisplayCapabilities caps: DisplayCapabilities)
+}
+
+
+extension MetalRenderer {
+    static func make() throws -> MetalRenderer {
+        guard MTLCreateSystemDefaultDevice() != nil else {
+            throw RendererError.deviceUnavailable
+        }
+        return MetalRenderer()
+    }
 }

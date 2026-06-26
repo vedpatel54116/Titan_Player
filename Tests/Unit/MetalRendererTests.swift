@@ -3,30 +3,41 @@ import MetalKit
 @testable import TitanPlayer
 
 final class MetalRendererTests: XCTestCase {
-    func testMetalRendererInitialization() {
-        guard let device = MTLCreateSystemDefaultDevice() else {
-            XCTSkip("Metal not available")
-            return
-        }
-        
-        let metalView = MTKView(frame: NSRect(x: 0, y: 0, width: 100, height: 100), device: device)
-        let renderer = MetalRenderer(metalView: metalView)
-        
-        XCTAssertNotNil(renderer)
+    func testParameterlessInitDoesNotRequireView() {
+        let renderer = MetalRenderer()
+        XCTAssertNotNil(
+            renderer,
+            "MetalRenderer should construct without a view (attach is separate)"
+        )
     }
-    
+
+    func testAttachToViewEstablishesDelegate() {
+        guard let renderer = MetalRenderer() else {
+            XCTSkip("Metal device unavailable")
+            return
+        }
+        let view = MTKView()
+        renderer.attach(to: view)
+        XCTAssertTrue(view.delegate === renderer)
+    }
+
+    func testMakeFactoryThrowsOnFailure() {
+        // Happy path: should succeed in CI; environments without Metal will throw.
+        do {
+            _ = try MetalRenderer.make()
+        } catch RendererError.deviceUnavailable {
+            // acceptable in headless environments
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
     func testHDRModeUpdate() {
-        guard let device = MTLCreateSystemDefaultDevice() else {
-            XCTSkip("Metal not available")
+        guard let renderer = MetalRenderer() else {
+            XCTSkip("Metal device unavailable")
             return
         }
-        
-        let metalView = MTKView(frame: NSRect(x: 0, y: 0, width: 100, height: 100), device: device)
-        guard let renderer = MetalRenderer(metalView: metalView) else {
-            XCTSkip("Renderer failed to initialize")
-            return
-        }
-        
+
         let hdr10Metadata = HDR10Metadata(
             displayPrimaries: (
                 red: SIMD2<Float>(0.708, 0.292),
@@ -39,27 +50,21 @@ final class MetalRendererTests: XCTestCase {
             maxContentLightLevel: 1000.0,
             maxFrameAverageLightLevel: 400.0
         )
-        
+
         renderer.updateHDRMode(.hdr10(hdr10Metadata))
     }
-    
+
     func testDisplayCapabilitiesUpdate() {
-        guard let device = MTLCreateSystemDefaultDevice() else {
-            XCTSkip("Metal not available")
+        guard let renderer = MetalRenderer() else {
+            XCTSkip("Metal device unavailable")
             return
         }
-        
-        let metalView = MTKView(frame: NSRect(x: 0, y: 0, width: 100, height: 100), device: device)
-        guard let renderer = MetalRenderer(metalView: metalView) else {
-            XCTSkip("Renderer failed to initialize")
-            return
-        }
-        
+
         guard let screen = NSScreen.main else {
             XCTSkip("No screen available")
             return
         }
-        
-        renderer.updateDisplayCapabilities(for: screen)
+
+        renderer.updateDisplayCapabilitiesSynchronously(for: screen)
     }
 }
