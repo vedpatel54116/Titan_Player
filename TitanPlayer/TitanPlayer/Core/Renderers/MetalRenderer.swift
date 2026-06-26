@@ -3,7 +3,7 @@ import MetalKit
 import CoreVideo
 import simd
 
-class MetalRenderer: NSObject, MTKViewDelegate {
+class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     

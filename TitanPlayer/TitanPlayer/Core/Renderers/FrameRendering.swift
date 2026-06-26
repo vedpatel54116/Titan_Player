@@ -1,7 +1,6 @@
 import Foundation
 import AppKit
 
-@MainActor
 protocol FrameRendering: AnyObject {
     func render(_ frame: VideoFrame) async throws
     func handleHDR(_ metadata: HDRMetadata)

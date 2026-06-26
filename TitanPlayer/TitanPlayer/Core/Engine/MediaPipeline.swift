@@ -12,6 +12,8 @@ class MediaPipeline: ObservableObject {
     private var decoder: MediaDecoding?
     private let timeObserver = TimeObserver()
     
+    var renderer: (any FrameRendering)?
+
     private let pipelineQueue = DispatchQueue(label: "com.titanplayer.pipeline", qos: .userInitiated)
     private var packetTask: Task<Void, Never>?
     
@@ -106,9 +108,26 @@ class MediaPipeline: ObservableObject {
     }
     
     private func processFrame(_ frame: MediaFrame) {
-        // Route frame to appropriate renderer
+        if case let .video(videoFrame) = frame {
+            let currentRenderer = renderer
+            Task { @MainActor in
+                try? await currentRenderer?.render(videoFrame)
+            }
+        }
+    }
+
+    // Test seam — exposes processFrame to XCTest without making it `public`.
+    func processFrameForTest(_ frame: MediaFrame) {
+        processFrame(frame)
     }
     
+    init(renderer: FrameRendering? = nil) {
+        self.renderer = renderer
+        if self.renderer == nil {
+            self.renderer = try? MetalRenderer.make()
+        }
+    }
+
     private func shouldUseAVFoundation(for info: MediaInfo) -> Bool {
         // Determine if AVFoundation can handle this format
         let supportedCodecs = ["h264", "hevc", "prores", "aac", "alac"]
