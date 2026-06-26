@@ -295,6 +295,39 @@ class MetalRenderer: NSObject, MTKViewDelegate {
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
     
     func draw(in view: MTKView) {}
+
+    // MARK: - FrameRendering
+
+    func render(_ frame: VideoFrame) async throws {
+        // Store the most recent frame; drawable-driven submission happens
+        // in draw(in:) once the next CAMetalDrawable is available.
+        pendingFrame = frame
+    }
+
+    private var pendingFrame: VideoFrame?
+
+    func handleHDR(_ metadata: HDRMetadata) {
+        switch metadata.type {
+        case .hdr10:
+            let hdr10 = HDR10Metadata(
+                displayPrimaries: (
+                    red: SIMD2<Float>(0.708, 0.292),
+                    green: SIMD2<Float>(0.170, 0.797),
+                    blue: SIMD2<Float>(0.131, 0.046)
+                ),
+                whitePoint: SIMD2<Float>(0.3127, 0.3290),
+                maxDisplayLuminance: metadata.maxLuminance,
+                minDisplayLuminance: metadata.minLuminance,
+                maxContentLightLevel: metadata.maxLuminance,
+                maxFrameAverageLightLevel: 400
+            )
+            updateHDRMode(.hdr10(hdr10))
+        case .hlg:
+            updateHDRMode(.hlg)
+        case .dolbyVision:
+            updateHDRMode(.sdr)
+        }
+    }
 }
 
 protocol MetalRendererDelegate: AnyObject {
