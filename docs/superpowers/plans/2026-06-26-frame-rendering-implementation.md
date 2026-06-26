@@ -394,7 +394,7 @@ func testMetalRendererImplementsAllProtocolMethods() {
             colorSpace: .sRGB
         )
         try? await renderer.render(frame)
-        renderer.handleHDR(HDRMetadata(type: .sdr, maxLuminance: 100, minLuminance: 0))
+        renderer.handleHDR(HDRMetadata(type: .hdr10, maxLuminance: 100, minLuminance: 0))
         if let screen = NSScreen.main {
             renderer.updateDisplayCapabilities(for: screen)
         }
@@ -427,35 +427,26 @@ private var pendingFrame: VideoFrame?
 func handleHDR(_ metadata: HDRMetadata) {
     switch metadata.type {
     case .hdr10:
-        updateHDRMode(.hdr10(HDR10Metadata(
+        let hdr10 = HDR10Metadata(
+            displayPrimaries: (
+                red: SIMD2<Float>(0.708, 0.292),
+                green: SIMD2<Float>(0.170, 0.797),
+                blue: SIMD2<Float>(0.131, 0.046)
+            ),
+            whitePoint: SIMD2<Float>(0.3127, 0.3290),
             maxDisplayLuminance: metadata.maxLuminance,
             minDisplayLuminance: metadata.minLuminance,
             maxContentLightLevel: metadata.maxLuminance,
             maxFrameAverageLightLevel: 400
-        )))
+        )
+        updateHDRMode(.hdr10(hdr10))
     case .hlg:
         updateHDRMode(.hlg)
-    case .sdr:
+    case .dolbyVision:
         updateHDRMode(.sdr)
     }
 }
 ```
-
-Audit/confirm: `HDR10Metadata` initializer signature exists in `TitanPlayer/Core/Renderers/HDRTypes.swift`. If not, prepend the simpler initializer in HDRTypes.swift:
-
-```swift
-extension HDR10Metadata {
-    init(maxDisplayLuminance: Float, minDisplayLuminance: Float,
-         maxContentLightLevel: Float, maxFrameAverageLightLevel: Float) {
-        self.maxDisplayLuminance = maxDisplayLuminance
-        self.minDisplayLuminance = minDisplayLuminance
-        self.maxContentLightLevel = maxContentLightLevel
-        self.maxFrameAverageLightLevel = maxFrameAverageLightLevel
-    }
-}
-```
-
-Add this initializer extension only if the call site in Task 4 Step 3 fails to compile.
 
 Add a `MainActor`-isolated override of `updateDisplayCapabilities(for:)` instead of calling the existing method (which is not class-bound), so the protocol sees a `@MainActor` surface:
 
