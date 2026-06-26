@@ -55,28 +55,40 @@ struct PlayerView: View {
 
 struct VideoContentView: View {
     @ObservedObject var viewModel: PlayerViewModel
-    
+
     var body: some View {
         ZStack {
             Color.black
-            
-            if viewModel.playState == .idle {
-                VStack(spacing: 16) {
-                    Image(systemName: "film")
-                        .font(.system(size: 64))
-                        .foregroundColor(.gray)
-                    
-                    Text("Drop a video file here")
-                        .foregroundColor(.gray)
-                    
-                    Text("or use File > Open")
-                        .font(.caption)
-                        .foregroundColor(.gray)
-                }
-            } else if viewModel.playState == .loading {
+
+            switch viewModel.playState {
+            case .idle:
+                placeholder
+            case .loading:
                 ProgressView("Loading...")
                     .foregroundColor(.white)
+            case .ready, .playing, .paused, .seeking, .ended:
+                if let renderer = viewModel.renderer {
+                    MetalMtkView(renderer: renderer)
+                } else {
+                    placeholder
+                }
+            case .error:
+                Text(viewModel.lastErrorMessage ?? "Playback error")
+                    .foregroundColor(.red)
             }
+        }
+    }
+
+    private var placeholder: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "film")
+                .font(.system(size: 64))
+                .foregroundColor(.gray)
+            Text("Drop a video file here")
+                .foregroundColor(.gray)
+            Text("or use File > Open")
+                .font(.caption)
+                .foregroundColor(.gray)
         }
     }
 }
