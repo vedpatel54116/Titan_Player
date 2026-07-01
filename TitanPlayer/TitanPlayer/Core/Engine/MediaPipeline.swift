@@ -182,6 +182,10 @@ class MediaPipeline: ObservableObject {
         processFrame(frame)
     }
     
+    func shouldDropFrameForTest(_ framePTS: TimeInterval) -> Bool {
+        shouldDropFrame(framePTS)
+    }
+    
     init(videoRenderer: VideoRenderer) {
         self.videoRenderer = videoRenderer
     }
