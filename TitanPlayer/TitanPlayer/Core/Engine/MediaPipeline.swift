@@ -28,36 +28,37 @@ class MediaPipeline: ObservableObject {
         playbackRate = max(0.25, min(4.0, rate))
     }
     
-    func openFile(url: URL) async {
+    func openFile(url: URL, adaptiveManager: AdaptiveDecoderManager? = nil) async throws {
         playState = .loading
-        
-        do {
-            let probeDemuxer = FFmpegDemuxer()
-            let info = try await probeDemuxer.open(url: url)
-            
-            self.mediaInfo = info
-            timeObserver.duration = info.duration.seconds
-            
-            if shouldUseAVFoundation(for: info) {
-                probeDemuxer.close()
-                let avDemuxer = AVFoundationDemuxer()
-                decoder = AVFoundationDecoder()
-                _ = try await avDemuxer.open(url: url)
-                demuxer = avDemuxer
-            } else {
-                demuxer = probeDemuxer
-                decoder = FFmpegDecoder()
-            }
 
-            if let videoTrack = info.videoTracks.first {
-                try decoder?.configure(for: videoTrack)
-            }
-            
-            playState = .paused
-            
-        } catch {
-            playState = .error(error.localizedDescription)
+        let probeDemuxer = FFmpegDemuxer()
+        let info = try await probeDemuxer.open(url: url)
+
+        self.mediaInfo = info
+        timeObserver.duration = info.duration.seconds
+
+        if let videoTrack = info.videoTracks.first, let manager = adaptiveManager {
+            // Use AdaptiveDecoderManager for real decoding
+            // configure() handles hardware→software fallback internally
+            try await manager.configure(for: videoTrack)
+            demuxer = probeDemuxer
+            decoder = VideoDecodingAdapter(decoder: manager.activeDecoder!)
+        } else if shouldUseAVFoundation(for: info) {
+            probeDemuxer.close()
+            let avDemuxer = AVFoundationDemuxer()
+            decoder = AVFoundationDecoder()
+            _ = try await avDemuxer.open(url: url)
+            demuxer = avDemuxer
+        } else {
+            demuxer = probeDemuxer
+            decoder = FFmpegDecoder()
         }
+
+        if let videoTrack = info.videoTracks.first {
+            try decoder?.configure(for: videoTrack)
+        }
+
+        playState = .paused
     }
     
     func openStream(session: DASHStreamSession) async {
