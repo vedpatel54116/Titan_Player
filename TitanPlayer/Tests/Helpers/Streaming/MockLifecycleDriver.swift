@@ -1,6 +1,7 @@
 import Foundation
 @testable import TitanPlayer
 
+@MainActor
 final class MockLifecycleDriver: StreamCacheLifecycleDelegate {
     weak var cache: StreamingCache?
     var didStartCalls: [(String, URL)] = []
@@ -10,8 +11,7 @@ final class MockLifecycleDriver: StreamCacheLifecycleDelegate {
 
     func runLifecycle(on cache: StreamingCache, identifier: String, url: URL) async {
         self.cache = cache
-        cache(didStart: identifier, url: url)
-        cache(didProgressUpdate: identifier, progress: 0.5, bytes: 25_000_000, totalBytes: 50_000_000)
+        cache._handleProgress(id: identifier, progress: 0.0, bytes: 0, totalBytes: 0)
         let info = DownloadedAssetInfo(
             id: identifier,
             originalURL: url,
@@ -21,7 +21,7 @@ final class MockLifecycleDriver: StreamCacheLifecycleDelegate {
             byteSize: 50_000_000,
             primaryVariantBitrate: 5_000_000
         )
-        cache(didFinish: identifier, info: info)
+        cache._handleFinish(id: identifier, info: info)
     }
 
     func cache(_ cache: StreamingCache, didStart id: String, url: URL) {

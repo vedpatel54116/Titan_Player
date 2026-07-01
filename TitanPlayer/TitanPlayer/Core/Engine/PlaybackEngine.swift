@@ -169,6 +169,9 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         audioDelay = max(-0.1, min(0.1, delay))
     }
 
+    /// Read-only access to the spatial audio engine for audio-tap wiring.
+    var activeSpatialAudioEngine: AudioEngine? { spatialAudioEngine }
+
     func setSpatialAudioEngine(_ engine: AudioEngine) {
         spatialAudioEngine = engine
         engine.spatialAudioEnabled = spatialAudioEnabled
@@ -247,7 +250,7 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     }
 }
 
-extension PlaybackEngine: AudioTappable {
+extension PlaybackEngine: AudioTappable, AudioTapProvider {
     var audioTap: AudioTap? {
         get { mediaPipeline?.audioTap }
         set { mediaPipeline?.audioTap = newValue }

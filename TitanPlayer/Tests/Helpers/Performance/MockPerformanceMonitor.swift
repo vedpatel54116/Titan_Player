@@ -1,6 +1,7 @@
 import Foundation
 @testable import TitanPlayer
 
+@MainActor
 final class MockPerformanceMonitor: PerformanceMonitorProtocol {
     private(set) var currentSystemState: SystemState = SystemState()
     private(set) var recentMetrics: PerformanceMetrics =

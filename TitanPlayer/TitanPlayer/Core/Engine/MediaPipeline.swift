@@ -197,7 +197,7 @@ class MediaPipeline: ObservableObject {
     }
 }
 
-extension MediaPipeline: AudioTappable {
+extension MediaPipeline: AudioTappable, AudioTapProvider {
     var audioTap: AudioTap? {
         get { decoder?.audioTap }
         set { decoder?.audioTap = newValue }

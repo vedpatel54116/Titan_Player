@@ -7,14 +7,14 @@ final class PlaybackEngineGaplessTests: XCTestCase {
         PlaybackEngine(videoRenderer: MockFrameRenderer())
     }
 
-    func testOnNextTrackCallback() {
+    func testOnNextTrackCallback() async {
         let engine = makeEngine()
         var called = false
         engine.onNextTrack = {
             called = true
             return nil
         }
-        engine.onNextTrack?()
+        _ = await engine.onNextTrack?()
         XCTAssertTrue(called)
     }
 

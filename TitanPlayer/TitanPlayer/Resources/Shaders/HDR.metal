@@ -1,7 +1,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-kernel void hdrToneMapping(
+kernel void hdr_tone_mapping(
     texture2d<float, access::read> inputTexture [[texture(0)]],
     texture2d<float, access::write> outputTexture [[texture(1)]],
     constant HDRUniforms &uniforms [[buffer(0)]],
@@ -15,29 +15,29 @@ kernel void hdrToneMapping(
     float3 color = input.rgb;
     
     if (uniforms.hdrMode == 1) {
-        color = pqToLinear(color);
+        color = hdr_pq_to_linear(color);
     } else if (uniforms.hdrMode == 2) {
-        color = hlgToLinear(color);
+        color = hdr_hlg_to_linear(color);
     }
     
     color = uniforms.colorMatrix * color;
     
     if (uniforms.useDynamicMetadata == 1) {
-        color = dynamicToneMap(color, uniforms);
+        color = hdr_dynamic_tone_map(color, uniforms);
     } else {
-        color = acesToneMap(color);
+        color = hdr_aces_tone_map(color);
     }
     
-    color = applyDynamicAdjustments(color, uniforms);
+    color = hdr_apply_dynamic_adjustments(color, uniforms);
     
     if (uniforms.isHDRDisplay == 0) {
-        color = linearToSRGB(color);
+        color = hdr_linear_to_srgb(color);
     }
     
     outputTexture.write(float4(color, 1.0), gid);
 }
 
-float3 dynamicToneMap(float3 color, constant HDRUniforms &uniforms) {
+float3 hdr_dynamic_tone_map(float3 color, constant HDRUniforms &uniforms) {
     float3 compressed = color;
     float maxComponent = max(compressed.r, max(compressed.g, compressed.b));
     
@@ -47,17 +47,17 @@ float3 dynamicToneMap(float3 color, constant HDRUniforms &uniforms) {
         compressed = uniforms.kneePoint + compressedExcess;
     }
     
-    return acesToneMap(compressed);
+    return hdr_aces_tone_map(compressed);
 }
 
-float3 applyDynamicAdjustments(float3 color, constant HDRUniforms &uniforms) {
+float3 hdr_apply_dynamic_adjustments(float3 color, constant HDRUniforms &uniforms) {
     float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
     color = mix(float3(luma), color, uniforms.saturationScale);
     color += uniforms.brightnessAdjustment;
     return color;
 }
 
-float3 pqToLinear(float3 pq) {
+float3 hdr_pq_to_linear(float3 pq) {
     float m1 = 0.1593017578125;
     float m2 = 78.84375;
     float c1 = 0.8359375;
@@ -70,7 +70,7 @@ float3 pqToLinear(float3 pq) {
     return pow(num / den, float3(1.0 / m1));
 }
 
-float3 hlgToLinear(float3 hlg) {
+float3 hdr_hlg_to_linear(float3 hlg) {
     float a = 0.17883277;
     float b = 0.28466892;
     float c = 0.55991073;
@@ -88,7 +88,7 @@ float3 hlgToLinear(float3 hlg) {
     return linear;
 }
 
-float3 acesToneMap(float3 x) {
+float3 hdr_aces_tone_map(float3 x) {
     float a = 2.51;
     float b = 0.03;
     float c = 2.43;
@@ -97,7 +97,7 @@ float3 acesToneMap(float3 x) {
     return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
 }
 
-float3 linearToSRGB(float3 linear) {
+float3 hdr_linear_to_srgb(float3 linear) {
     return select(
         1.055 * pow(linear, float3(1.0 / 2.4)) - 0.055,
         12.92 * linear,

@@ -1,6 +1,7 @@
 import XCTest
 import AppKit
 import CoreVideo
+import CoreMedia
 @testable import TitanPlayer
 
 final class FrameRenderingProtocolTests: XCTestCase {
@@ -36,9 +37,7 @@ final class FrameRenderingProtocolTests: XCTestCase {
     }
 
     func testMetalRendererImplementsAllProtocolMethods() throws {
-        guard let renderer = MetalRenderer() else {
-            throw XCTSkip("Metal device unavailable in this environment")
-        }
+        let renderer = MetalRenderer()
         let pixelBuffer = makeBlankPixelBuffer()
         let frame = VideoFrame(
             pixelBuffer: pixelBuffer,

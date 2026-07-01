@@ -4,6 +4,7 @@ import AVFoundation
 
 final class SubsystemSeamTests: XCTestCase {
 
+    @MainActor
     func test_streaming_set_preferred_peak_bitrate_compiles() {
         let manager = StreamingManager.makeDefault()
         // No AVPlayer attached → method should be a no-op, not a crash.
@@ -22,7 +23,7 @@ final class SubsystemSeamTests: XCTestCase {
         XCTAssertEqual(engine.currentComplexityMode, .full)
     }
 
-    func test_metal_renderer_resolution_cap_default_is_original() {
+    func test_metal_renderer_resolution_cap_default_is_original() throws {
         guard let renderer = try? MetalRenderer.make() else {
             // Metal may not be available in some CI environments (e.g., headless).
             throw XCTSkip("Metal not available in this environment")

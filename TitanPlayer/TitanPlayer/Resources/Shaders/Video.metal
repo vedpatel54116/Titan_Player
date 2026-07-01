@@ -1,7 +1,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-fragment float4 fragmentShader(
+fragment float4 video_fragment_shader(
     VertexOut in [[stage_in]],
     texture2d<float> toneMappedTexture [[texture(0)]],
     constant Uniforms &uniforms [[buffer(0)]]

@@ -17,9 +17,15 @@ final class HDR10PlusParserTests: XCTestCase {
     }
     
     func testParseInsufficientDataReturnsNil() {
-        let data = Data([0x00, 0x01, 0x02])
-        let result = parser.parseHDR10PlusData(data)
-        XCTAssertNil(result)
+        let messages = [
+            SEIMessage(
+                type: .hdr10Plus,
+                payload: Data([0x00, 0x01, 0x02]),
+                timestamp: CMTime(seconds: 0, preferredTimescale: 600)
+            )
+        ]
+        let result = parser.parseSEIMessages(messages)
+        XCTAssertTrue(result.isEmpty)
     }
     
     func testGenerateDynamicToneMappingParams() {

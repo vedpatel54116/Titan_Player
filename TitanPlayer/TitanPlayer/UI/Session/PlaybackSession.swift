@@ -29,6 +29,7 @@ final class PlaybackSession: ObservableObject {
     @Published var subtitleBackgroundOpacity: Float = 0.6
 
     @Published var currentlyAccessedURL: URL?
+    @Published var fileOpenError: String?
 
     private let bookmarkDefaultsKey = "SecurityScopedBookmarks"
 
@@ -52,7 +53,7 @@ final class PlaybackSession: ObservableObject {
 
     // MARK: - Security-Scoped Bookmark Management
 
-    private func createBookmark(for url: URL) {
+    func createBookmark(for url: URL) {
         do {
             let bookmarkData = try url.bookmarkData(
                 options: .withSecurityScope,
@@ -67,7 +68,7 @@ final class PlaybackSession: ObservableObject {
         }
     }
 
-    private func resolveBookmark(for path: String) -> URL? {
+    func resolveBookmark(for path: String) -> URL? {
         guard let bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data],
               let bookmarkData = bookmarks[path] else {
             return nil
@@ -96,7 +97,7 @@ final class PlaybackSession: ObservableObject {
         }
     }
 
-    private func removeBookmark(for path: String) {
+    func removeBookmark(for path: String) {
         var bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data] ?? [:]
         bookmarks.removeValue(forKey: path)
         UserDefaults.standard.set(bookmarks, forKey: bookmarkDefaultsKey)
@@ -111,7 +112,7 @@ final class PlaybackSession: ObservableObject {
         return accessing
     }
 
-    private func stopAccessingCurrentResource() {
+    func stopAccessingCurrentResource() {
         if let currentURL = currentlyAccessedURL {
             currentURL.stopAccessingSecurityScopedResource()
             NSLog("[BookmarkManager] Stopped accessing: %@", currentURL.path)
@@ -119,13 +120,12 @@ final class PlaybackSession: ObservableObject {
         }
     }
 
-    private func showStaleBookmarkAlert(path: String) {
-        let alert = NSAlert()
-        alert.messageText = "File Unavailable"
-        alert.informativeText = "The file at \"\(path)\" may have been moved or deleted. Please open the file again."
-        alert.alertStyle = .warning
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+    private func showFileAccessError(path: String, reason: String) {
+        fileOpenError = "Could not open \"\(path)\". \(reason)"
+    }
+
+    func dismissFileOpenError() {
+        fileOpenError = nil
     }
 
     init(videoRenderer: VideoRenderer? = nil) {
@@ -190,13 +190,14 @@ final class PlaybackSession: ObservableObject {
 
         // Resolve bookmark to get fresh URL
         guard let resolvedURL = resolveBookmark(for: url.path) else {
-            showStaleBookmarkAlert(path: url.path)
+            showFileAccessError(path: url.path, reason: "The file may have been moved or deleted. Please open the file again.")
             return
         }
 
         // Start accessing security-scoped resource
         guard startAccessingBookmark(for: resolvedURL) else {
             playState = .error("Cannot access file at \(url.path). Check file permissions.")
+            showFileAccessError(path: url.path, reason: "The file could not be accessed. Check that the file exists and you have permission to read it.")
             return
         }
 
@@ -227,6 +228,7 @@ final class PlaybackSession: ObservableObject {
             performance.optimizeForCurrentState()
         } catch {
             stopAccessingCurrentResource()
+            showFileAccessError(path: url.path, reason: error.localizedDescription)
         }
     }
 
@@ -434,35 +436,48 @@ final class PlaybackSession: ObservableObject {
         }
     }
 
-    /// Install the audio-tap on every decoder that the playback engine exposes.
-    /// Today `MediaPipeline` doesn't expose its decoder publicly, so the wiring
-    /// is best-effort: when a decoder becomes downcastable from `MediaPipeline`,
-    /// it gets the session-owned meter bound. Until then, the audio meter
-    /// remains dormant (and `audioMeter.metering` stays at `.zero`).
+    /// Wire the audio tap via direct dependency injection through
+    /// `AudioTapProvider` (no Mirror reflection). The closure feeds
+    /// decoded PCM frames to both the loudness meter and the spatial
+    /// audio engine.
     private func installAudioTap() {
-        var decoder = decoderFromEngine()
         let meter = analysis.audioMeter
-        decoder?.audioTap = { frame in
+        engine.audioTap = { [weak self] frame in
             Task { @MainActor in
                 meter.consume(frame: frame)
+                if let spatialEngine = self?.engine.activeSpatialAudioEngine,
+                   spatialEngine.isRunning {
+                    let buf = Self.makePCMBuffer(from: frame)
+                    spatialEngine.processAudioBuffer(buf)
+                }
             }
         }
     }
 
-    /// Best-effort accessor that walks the engine's reflection to find any
-    /// `MediaDecoding`-conforming decoder. This avoids leaking the `MediaPipeline`
-    /// internal property shape while still allowing the session to wire the tap.
-    private func decoderFromEngine() -> MediaDecoding? {
-        let mirror = Mirror(reflecting: engine)
-        for child in mirror.children {
-            if let d = child.value as? MediaDecoding { return d }
-            // One level deeper for MediaPipeline wrapping.
-            let inner = Mirror(reflecting: child.value)
-            for grandchild in inner.children {
-                if let d = grandchild.value as? MediaDecoding { return d }
+    /// Convert a decoded `AudioFrame` into an `AVAudioPCMBuffer` suitable
+    /// for feeding into `AudioEngine.processAudioBuffer(_:)`.
+    private nonisolated static func makePCMBuffer(from frame: AudioFrame) -> AVAudioPCMBuffer {
+        let ch  = frame.format.channels
+        let rate = frame.format.sampleRate
+        let format = AVAudioFormat(standardFormatWithSampleRate: Double(rate),
+                                   channels: AVAudioChannelCount(ch))!
+        let total = frame.buffer.count
+        let frames = total / ch
+        let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: UInt32(frames))!
+        buf.frameLength = UInt32(frames)
+        let src = frame.buffer
+        if frame.format.isInterleaved {
+            for c in 0..<ch {
+                let dst = buf.floatChannelData![c]
+                for i in 0..<frames { dst[i] = src[i * ch + c] }
+            }
+        } else {
+            for c in 0..<ch {
+                let dst = buf.floatChannelData![c]
+                for i in 0..<frames { dst[i] = src[c * frames + i] }
             }
         }
-        return nil
+        return buf
     }
 
     private func installKeyMonitor() {

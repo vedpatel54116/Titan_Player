@@ -17,6 +17,14 @@ struct ContentView: View {
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleDrop(providers: providers)
         }
+        .alert("File Open Error", isPresented: .init(
+            get: { session.fileOpenError != nil },
+            set: { if !$0 { session.dismissFileOpenError() } }
+        )) {
+            Button("OK") { session.dismissFileOpenError() }
+        } message: {
+            Text(session.fileOpenError ?? "")
+        }
     }
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {

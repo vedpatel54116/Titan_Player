@@ -22,7 +22,6 @@ final class MediaTypesTests: XCTestCase {
         let subtitle = SubtitleTrackInfo(
             codec: "mov_text",
             language: "en",
-            isSDH: false,
             isForced: false
         )
         let info = MediaInfo(
@@ -54,9 +53,7 @@ final class MediaTypesTests: XCTestCase {
     }
 
     func test_subtitleTrackCarriesOptionalForced() {
-        let forced = SubtitleTrackInfo(codec: "webvtt", language: "fr", isSDH: false, isForced: true)
+        let forced = SubtitleTrackInfo(codec: "webvtt", language: "fr", isForced: true)
         XCTAssertTrue(forced.isForced)
-        let sdh = SubtitleTrackInfo(codec: "webvtt", language: "en", isSDH: true, isForced: false)
-        XCTAssertTrue(sdh.isSDH)
     }
 }

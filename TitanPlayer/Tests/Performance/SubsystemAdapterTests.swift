@@ -2,6 +2,7 @@ import XCTest
 import CoreGraphics
 @testable import TitanPlayer
 
+@MainActor
 final class SubsystemAdapterTests: XCTestCase {
 
     private func makeContext() -> PerformanceContext {

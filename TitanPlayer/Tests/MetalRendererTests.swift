@@ -19,7 +19,7 @@ final class MetalRendererTests: XCTestCase {
         XCTAssertNotNil(renderer)
     }
 
-    func testMakeThrowsWhenDeviceUnavailable() {
+    func testMakeThrowsWhenDeviceUnavailable() throws {
         // Metal is available on all modern Macs; this only documents the
         // failure path. We cannot force nil here, so just verify the happy
         // path returns a usable instance.

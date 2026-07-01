@@ -1,6 +1,7 @@
 import XCTest
 @testable import TitanPlayer
 
+@MainActor
 final class MediaPipelineRateTests: XCTestCase {
     private func makePipeline() -> MediaPipeline {
         MediaPipeline(videoRenderer: MockFrameRenderer())

@@ -9,11 +9,12 @@ final class DecoderPreferenceTests: XCTestCase {
         state.thermalState = .nominal
 
         let track = VideoTrackInfo(
-            trackID: 1,
             codec: "h264",
             width: 1920,
             height: 1080,
-            frameRate: 30
+            frameRate: 30,
+            isHDR: false,
+            extradata: nil
         )
         let hw = VideoToolboxDecoder()
         let sw = FFmpegSoftwareDecoder()

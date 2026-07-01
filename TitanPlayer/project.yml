@@ -35,6 +35,16 @@ settings:
       CODE_SIGN_ENTITLEMENTS: TitanPlayer/TitanPlayer/TitanPlayer.Direct.entitlements
       ENABLE_APP_SANDBOX: NO
 
+packages:
+  FFmpegBuild:
+    path: .build/checkouts/FFmpegBuild
+    products:
+      - FFmpegBuild
+      - Libavcodec
+      - Libavformat
+      - Libavutil
+      - Libswscale
+
 targets:
   TitanPlayer:
     type: application
@@ -52,6 +62,17 @@ targets:
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
           - "@executable_path/../Frameworks"
+    dependencies:
+      - package: FFmpegBuild
+        product: FFmpegBuild
+      - package: FFmpegBuild
+        product: Libavcodec
+      - package: FFmpegBuild
+        product: Libavformat
+      - package: FFmpegBuild
+        product: Libavutil
+      - package: FFmpegBuild
+        product: Libswscale
     preBuildScripts:
       - script: |
           set -euo pipefail
@@ -66,6 +87,33 @@ targets:
           cp ".build/${CONFIG_LOWER}/TitanPlayer" "${DEST}"
           echo "embedded swiftrm executable at ${DEST}"
       - name: SwiftPM build
+    postBuildScripts:
+      - script: |
+          set -euo pipefail
+          SHADER_DIR="${SRCROOT}/TitanPlayer/Resources/Shaders"
+          OUTPUT_DIR="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+          mkdir -p "${OUTPUT_DIR}"
+          mkdir -p "${DERIVED_FILE_DIR}/Metal"
+          METAL_FILES=()
+          while IFS= read -r -d '' file; do
+            METAL_FILES+=("$file")
+          done < <(find "${SHADER_DIR}" -name "*.metal" -print0)
+          if [ ${#METAL_FILES[@]} -eq 0 ]; then
+            echo "warning: No .metal files found in ${SHADER_DIR}"
+            exit 0
+          fi
+          xcrun metal -c "${METAL_FILES[@]}" \
+            -I "${SHADER_DIR}" \
+            -o "${DERIVED_FILE_DIR}/Metal/default.air"
+          xcrun metallib "${DERIVED_FILE_DIR}/Metal/default.air" \
+            -o "${OUTPUT_DIR}/default.metallib"
+          echo "Compiled Metal shaders → ${OUTPUT_DIR}/default.metallib"
+      - name: Compile Metal Shaders
+    resources:
+      - path: TitanPlayer/Resources/Assets.xcassets
+      - path: TitanPlayer/Resources/Shaders
+        buildPhase: resources
+        optional: true
 
 schemes:
   TitanPlayer:

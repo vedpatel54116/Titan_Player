@@ -1,32 +1,64 @@
 import Foundation
 import Metal
+import os.log
 
 /// Loads Metal shader libraries, preferring pre-compiled `.metallib` bundles
 /// and falling back to runtime MSL compilation from bundled `.metal` sources.
 enum MetalShaders {
     static let sourceFileNames = ["Common", "Video", "HDR", "Analysis", "Subtitle"]
     static let resourceBundleName = "TitanPlayer_TitanPlayer.bundle"
+    
+    private static let logger = Logger(subsystem: "com.titanplayer", category: "MetalShaders")
 
     /// Returns a Metal library for the device. Tries in order:
     /// 1. Embedded default.metallib (linked by Xcode)
     /// 2. Pre-compiled default.metallib in bundle resources
     /// 3. Runtime compilation from bundled .metal sources (SwiftPM fallback)
     static func loadLibrary(device: MTLDevice) -> MTLLibrary? {
+        // Try embedded default library first (Xcode builds)
         if let lib = device.makeDefaultLibrary() {
+            logger.info("Loaded embedded default.metallib")
             return lib
         }
+        
+        // Try loading pre-compiled default.metallib from bundle
         if let lib = loadPrecompiledMetallib(device: device) {
+            logger.info("Loaded default.metallib from bundle resources")
             return lib
         }
-        guard let source = loadCombinedSource() else { return nil }
-        return try? device.makeLibrary(source: source, options: nil)
+        
+        // Fall back to runtime compilation from .metal sources
+        logger.warning("default.metallib not found, falling back to runtime shader compilation")
+        guard let source = loadCombinedSource() else {
+            logger.error("Failed to load any shader source files")
+            return nil
+        }
+        
+        do {
+            let lib = try device.makeLibrary(source: source, options: nil)
+            logger.info("Successfully compiled shaders from source at runtime")
+            return lib
+        } catch {
+            logger.error("Runtime shader compilation failed: \(error.localizedDescription)")
+            return nil
+        }
     }
 
     // MARK: - Pre-compiled metallib loading
 
     private static func loadPrecompiledMetallib(device: MTLDevice) -> MTLLibrary? {
-        guard let url = locateMetallib(named: "default") else { return nil }
-        return try? device.makeLibrary(URL: url)
+        guard let url = locateMetallib(named: "default") else {
+            logger.debug("default.metallib not found in any bundle location")
+            return nil
+        }
+        do {
+            let lib = try device.makeLibrary(URL: url)
+            logger.info("Loaded pre-compiled metallib from: \(url.path)")
+            return lib
+        } catch {
+            logger.error("Failed to load metallib from \(url.path): \(error.localizedDescription)")
+            return nil
+        }
     }
 
     private static func locateMetallib(named name: String) -> URL? {
@@ -53,11 +85,18 @@ enum MetalShaders {
         let preamble = "#include <metal_stdlib>\nusing namespace metal;\n"
         var body = ""
         for name in sourceFileNames {
-            guard let url = locateShaderFile(named: name),
-                  let raw = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            guard let url = locateShaderFile(named: name) else {
+                logger.debug("Shader file not found: \(name).metal")
+                continue
+            }
+            guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
+                logger.warning("Failed to read shader file: \(url.path)")
+                continue
+            }
             let stripped = stripRedundantHeaders(raw)
             body += "\n// ----- \(name).metal -----\n" + stripped + "\n"
             found = true
+            logger.debug("Loaded shader source: \(name).metal from \(url.path)")
         }
         guard found else { return nil }
         let combined = preamble + body

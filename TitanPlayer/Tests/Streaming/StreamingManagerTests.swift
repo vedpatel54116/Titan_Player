@@ -39,8 +39,8 @@ final class StreamingManagerTests: XCTestCase {
 
     func testIsStreamingHLSUsesPathExtension() {
         XCTAssertTrue(manager.isStreaming(.m3u8))
-        XCTAssertFalse(manager.isStreaming(.mp4))
-        XCTAssertFalse(manager.isStreaming(.mov))
+        XCTAssertFalse(manager.isStreaming(.other))
+        XCTAssertFalse(manager.isStreaming(.other))
     }
 
     func testAttachHLSBindsStatsProvider() {

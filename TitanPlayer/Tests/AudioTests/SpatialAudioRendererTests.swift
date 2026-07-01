@@ -1,5 +1,6 @@
 import XCTest
 import AVFAudio
+import simd
 @testable import TitanPlayer
 
 final class SpatialAudioRendererTests: XCTestCase {

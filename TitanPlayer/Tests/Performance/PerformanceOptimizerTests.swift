@@ -5,6 +5,7 @@ import CoreGraphics
 @MainActor
 final class PerformanceOptimizerTests: XCTestCase {
 
+    @MainActor
     final class RecordingAdapter: AdaptiveSubsystemAdapting {
         var calls: [[QualityAction]] = []
         func apply(_ actions: [QualityAction], context: PerformanceContext) {
