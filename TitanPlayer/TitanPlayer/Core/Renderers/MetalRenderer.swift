@@ -38,6 +38,8 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     
     private let displayDetector = DisplayCapabilityDetector()
     
+    private var displayTargets: [String: DisplayRenderTarget] = [:]
+    
     private let vertexData: [Float] = [
         -1.0, -1.0, 0.0, 1.0,
          1.0, -1.0, 1.0, 1.0,
@@ -167,6 +169,133 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         dynamicSaturationScale = 1.0
         dynamicBrightnessAdjustment = 0.0
         useDynamicMetadata = false
+    }
+    
+    // MARK: - Multi-Display Target Support
+    
+    func addDisplayTarget(stableID: String, layer: CAMetalLayer, capabilities: DisplayCapabilities, iccProfile: ICCProfile) {
+        guard displayTargets[stableID] == nil else { return }
+        
+        let uniformsBuffer = device.makeBuffer(
+            length: MemoryLayout<HDRUniforms>.size,
+            options: .storageModeShared
+        )!
+        
+        var uniforms = HDRUniforms(
+            hdrMode: 0,
+            isHDRDisplay: capabilities.supportsEDR ? 1 : 0,
+            colorMatrix: iccProfile.matrix,
+            maxLuminance: capabilities.maxEDRLuminance,
+            minLuminance: 0.001,
+            maxContentLightLevel: 1000.0,
+            maxFrameAverageLightLevel: 400.0,
+            kneePoint: 0,
+            compressionRatio: 1,
+            saturationScale: 1,
+            brightnessAdjustment: 0,
+            useDynamicMetadata: 0
+        )
+        memcpy(uniformsBuffer.contents(), &uniforms, MemoryLayout<HDRUniforms>.size)
+        
+        let pipelineDescriptor = MTLRenderPipelineDescriptor()
+        pipelineDescriptor.vertexFunction = device.makeDefaultLibrary()?.makeFunction(name: "vertexShader")
+        pipelineDescriptor.fragmentFunction = device.makeDefaultLibrary()?.makeFunction(name: "fragmentShader")
+        pipelineDescriptor.colorAttachments[0].pixelFormat = layer.pixelFormat
+        
+        let pipelineState = try? device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+        
+        let target = DisplayRenderTarget(
+            stableID: stableID,
+            layer: layer,
+            capabilities: capabilities,
+            iccProfile: iccProfile,
+            hdrUniformsBuffer: uniformsBuffer,
+            toneMappedTexture: nil,
+            renderPipelineState: pipelineState
+        )
+        displayTargets[stableID] = target
+    }
+    
+    func removeDisplayTarget(stableID: String) {
+        displayTargets.removeValue(forKey: stableID)
+    }
+    
+    func updateDisplayCapabilities(for stableID: String, capabilities: DisplayCapabilities, iccProfile: ICCProfile) {
+        guard var target = displayTargets[stableID] else { return }
+        target.capabilities = capabilities
+        target.iccProfile = iccProfile
+        
+        var uniforms = HDRUniforms(
+            hdrMode: 0,
+            isHDRDisplay: capabilities.supportsEDR ? 1 : 0,
+            colorMatrix: iccProfile.matrix,
+            maxLuminance: capabilities.maxEDRLuminance,
+            minLuminance: 0.001,
+            maxContentLightLevel: 1000.0,
+            maxFrameAverageLightLevel: 400.0,
+            kneePoint: 0,
+            compressionRatio: 1,
+            saturationScale: 1,
+            brightnessAdjustment: 0,
+            useDynamicMetadata: 0
+        )
+        memcpy(target.hdrUniformsBuffer.contents(), &uniforms, MemoryLayout<HDRUniforms>.size)
+        displayTargets[stableID] = target
+    }
+    
+    private func renderTarget(
+        _ target: DisplayRenderTarget,
+        inputTexture: MTLTexture,
+        commandBuffer: MTLCommandBuffer
+    ) {
+        var target = target
+        let width = target.layer.drawableSize.width > 0 ? Int(target.layer.drawableSize.width) : inputTexture.width
+        let height = target.layer.drawableSize.height > 0 ? Int(target.layer.drawableSize.height) : inputTexture.height
+        
+        if target.toneMappedTexture?.width != width || target.toneMappedTexture?.height != height {
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+                pixelFormat: .rgba16Float,
+                width: width, height: height,
+                mipmapped: false
+            )
+            descriptor.usage = [.shaderRead, .shaderWrite]
+            descriptor.storageMode = .private
+            target.toneMappedTexture = device.makeTexture(descriptor: descriptor)
+        }
+        
+        guard let outputTexture = target.toneMappedTexture,
+              let toneMappingPipeline = toneMappingPipeline else { return }
+        
+        if let computeEncoder = commandBuffer.makeComputeCommandEncoder() {
+            computeEncoder.setComputePipelineState(toneMappingPipeline)
+            computeEncoder.setTexture(inputTexture, index: 0)
+            computeEncoder.setTexture(outputTexture, index: 1)
+            computeEncoder.setBuffer(target.hdrUniformsBuffer, offset: 0, index: 0)
+            let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
+            let gridSize = MTLSize(width: inputTexture.width, height: inputTexture.height, depth: 1)
+            computeEncoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
+            computeEncoder.endEncoding()
+        }
+        
+        guard let drawable = target.layer.nextDrawable(),
+              let pipelineState = target.renderPipelineState,
+              let vertexBuffer = vertexBuffer else { return }
+        
+        let renderDescriptor = MTLRenderPassDescriptor()
+        renderDescriptor.colorAttachments[0].texture = drawable.texture
+        renderDescriptor.colorAttachments[0].loadAction = .clear
+        renderDescriptor.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+        renderDescriptor.colorAttachments[0].storeAction = .store
+        
+        if let renderEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: renderDescriptor) {
+            renderEncoder.setRenderPipelineState(pipelineState)
+            renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+            renderEncoder.setFragmentTexture(outputTexture, index: 0)
+            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            renderEncoder.endEncoding()
+        }
+        
+        commandBuffer.present(drawable)
     }
     
     func updateSubtitleBitmap(_ bitmap: SubtitleBitmap?) {
