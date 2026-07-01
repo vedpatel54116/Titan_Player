@@ -1,5 +1,6 @@
 import Foundation
 import AppKit
+import Metal
 
 typealias VideoRenderer = FrameRendering
 
@@ -8,6 +9,14 @@ protocol FrameRendering: AnyObject {
     func handleHDR(_ metadata: HDRMetadata)
     func updateDisplayCapabilities(for screen: NSScreen)
     func resetDynamicHDRParams()
+
+    func addDisplayTarget(stableID: String, layer: CAMetalLayer, capabilities: DisplayCapabilities, iccProfile: ICCProfile)
+    func removeDisplayTarget(stableID: String)
+}
+
+extension FrameRendering {
+    func addDisplayTarget(stableID: String, layer: CAMetalLayer, capabilities: DisplayCapabilities, iccProfile: ICCProfile) {}
+    func removeDisplayTarget(stableID: String) {}
 }
 
 enum RendererError: Error, LocalizedError {
