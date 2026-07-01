@@ -1,0 +1,7 @@
+{
+  "cpuCeilingPct": 0.05,
+  "memoryCeilingBytes": 500000000,
+  "iterations": 1,
+  "sleepSeconds": 5,
+  "fixture": "test_4k_h264.mp4"
+}

@@ -60,7 +60,8 @@ final class BackendSwapTests: XCTestCase {
             width: 1920,
             height: 1080,
             frameRate: 30.0,
-            isHDR: false
+            isHDR: false,
+            extradata: nil
         )
         let packet = MediaPacket(
             streamIndex: 0,

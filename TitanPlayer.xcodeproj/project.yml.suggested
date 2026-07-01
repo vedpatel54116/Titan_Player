@@ -1,0 +1,7 @@
+# project.yml has moved
+
+The canonical xcodegen manifest now lives at `TitanPlayer/project.yml`
+(regenerated from this scaffold when xcodegen was wired in 2026-06-30).
+
+`xcodegen generate --spec TitanPlayer/project.yml` produces
+`TitanPlayer.xcodeproj/project.pbxproj` from it.

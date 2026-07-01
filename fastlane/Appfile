@@ -1,0 +1,17 @@
+# fastlane/Appfile
+# Per-developer overrides live in ~/.fastlane/.env:
+#   APPLE_ID=<your-developer-apple-id@example.com>
+#   TEAM_ID=<your Apple Developer Team ID>
+#   APP_STORE_TEAM_ID=<your App Store Connect team ID, may equal TEAM_ID>
+#   MATCH_PASSWORD=<match keychain password>
+#   NOTARY_API_KEY_PATH=<absolute path to AuthKey_XXXX.json>
+
+app_identifier "com.titanplayer.app"
+
+# Two signing identities, two lanes.
+for_platform :mac do
+  itc_team_id(ENV["APP_STORE_TEAM_ID"])                # App Store Connect team
+  team_id(ENV["TEAM_ID"])                               # Developer Portal team
+end
+
+# Optional: replace defaults once keychain certs are imported via `match`.

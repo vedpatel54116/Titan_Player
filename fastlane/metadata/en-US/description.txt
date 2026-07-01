@@ -1,0 +1,15 @@
+TitanPlayer is an open-source, native macOS media player focused on
+high-fidelity playback of 4K HDR content, multi-window library browsing,
+and AirPlay 2 multi-room output.
+
+• Hardware-accelerated decode of H.264, HEVC, and AV1 (on supported Macs).
+• Real-time HDR tone-mapping pipeline with per-display calibration.
+• Multi-window library browsing — drag folders into their own window.
+• AirPlay 2 sender with per-device buffering.
+• Spatial Audio passthrough and external audio device routing.
+• Picture-in-Picture and a floating Mini Player.
+• Sidecar subtitle / closed-caption support with WebVTT cues.
+• Playback position memory, resume from last frame.
+• Open MIT-licensed code; no telemetry, no analytics, no upload of your media.
+
+Runs on macOS 14 Sonoma or later, on Apple Silicon and Intel iGPUs.

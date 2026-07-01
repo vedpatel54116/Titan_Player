@@ -16,6 +16,7 @@ struct VideoTrackInfo {
     let height: Int
     let frameRate: Double
     let isHDR: Bool
+    let extradata: Data?
 }
 
 struct AudioTrackInfo {

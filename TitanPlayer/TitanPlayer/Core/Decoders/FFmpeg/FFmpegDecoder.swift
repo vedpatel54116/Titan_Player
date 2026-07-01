@@ -3,6 +3,8 @@ import CoreVideo
 import CoreMedia
 
 class FFmpegDecoder: MediaDecoding {
+    var audioTap: ((AudioFrame) -> Void)?
+
     func configure(for track: VideoTrackInfo) throws {
         // Find and open appropriate codec
     }

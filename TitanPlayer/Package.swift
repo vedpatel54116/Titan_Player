@@ -10,13 +10,27 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "TitanPlayer",
-            dependencies: ["FFmpegBuild"],
-            path: "TitanPlayer"
+            dependencies: [
+                "FFmpegBuild",
+                .product(name: "Libavcodec", package: "FFmpegBuild"),
+                .product(name: "Libavformat", package: "FFmpegBuild"),
+                .product(name: "Libavutil", package: "FFmpegBuild"),
+                .product(name: "Libswscale", package: "FFmpegBuild"),
+            ],
+            path: "TitanPlayer",
+            exclude: ["Info.plist"],
+            resources: [
+                .process("Resources/Assets.xcassets"),
+                .process("Resources/Shaders")
+            ]
         ),
         .testTarget(
             name: "TitanPlayerTests",
             dependencies: ["TitanPlayer"],
-            path: "Tests"
+            path: "Tests",
+            resources: [
+                .copy("Fixtures/test.mp4")
+            ]
         )
     ]
 )

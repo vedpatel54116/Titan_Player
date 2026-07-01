@@ -1,0 +1,2 @@
+Initial 1.0 release. Hardware-accelerated 4K HDR playback, multi-window
+library, AirPlay 2 output, Picture-in-Picture, and WebVTT sidecar subs.

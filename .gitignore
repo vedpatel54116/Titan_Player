@@ -1,0 +1,31 @@
+.build/
+.swiftpm/
+.DS_Store
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+*.xcworkspace/xcuserdata/
+Benchmarks/.build/
+
+# Xcode project regeneration (xcodegen outputs)
+TitanPlayer.xcodeproj/project.pbxproj
+TitanPlayer.xcodeproj/project.xcworkspace/
+TitanPlayer.xcodeproj/xcshareddata/xcschemes/TitanPlayer.xcscheme
+TitanPlayer.xcodeproj/xcshareddata/xcschemes/TitanPlayerUITests.xcscheme
+
+# Standard Xcode user state (never commit)
+*.xcuserstate
+xcuserdata/
+*.xcuserdatamodel/
+
+# Build artifacts
+DerivedData/
+build/
+*.app
+*.pkg
+*.dmg
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output

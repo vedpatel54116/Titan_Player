@@ -1,0 +1,1 @@
+player,video,4k,hdr,hevc,av1,airplay,spatial,subtitles,library

@@ -2,75 +2,84 @@ import SwiftUI
 import CoreMedia
 
 struct InspectorView: View {
-    @ObservedObject var viewModel: PlayerViewModel
-    
+    @EnvironmentObject var session: PlaybackSession
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            // Media info section
-            if let info = viewModel.mediaInfo {
+            if let info = session.mediaInfo {
                 Section {
                     InfoRow(label: "Format", value: info.format)
                     InfoRow(label: "Duration", value: formatDuration(info.duration))
-                    
-                    ForEach(info.videoTracks.indices, id: \.self) { index in
-                        let track = info.videoTracks[index]
-                        InfoRow(label: "Video \(index + 1)", value: "\(track.codec) \(track.width)x\(track.height)")
+                    ForEach(info.videoTracks.indices, id: \.self) { i in
+                        let t = info.videoTracks[i]
+                        InfoRow(label: "Video \(i+1)", value: "\(t.codec) \(t.width)x\(t.height)")
                     }
-                    
-                    ForEach(info.audioTracks.indices, id: \.self) { index in
-                        let track = info.audioTracks[index]
-                        InfoRow(label: "Audio \(index + 1)", value: "\(track.codec) \(track.channels)ch")
+                    ForEach(info.audioTracks.indices, id: \.self) { i in
+                        let t = info.audioTracks[i]
+                        InfoRow(label: "Audio \(i+1)", value: "\(t.codec) \(t.channels)ch")
                     }
-                } header: {
-                    Text("Media Info")
-                        .font(.headline)
-                }
+                } header: { Text("Media Info").font(.headline) }
             }
-            
-            // Subtitle section
+
             Section {
-                if viewModel.subtitles.isEmpty {
-                    Text("No subtitles available")
-                        .foregroundColor(.secondary)
+                if session.subtitles.isEmpty {
+                    Text("No subtitles available").foregroundColor(.secondary)
                 } else {
-                    ForEach(Array(viewModel.subtitles.enumerated()), id: \.offset) { _, track in
-                        SubtitleRow(track: track, isActive: track.name == viewModel.activeSubtitle?.name) {
-                            viewModel.setSubtitleTrack(track)
+                    ForEach(Array(session.subtitles.enumerated()), id: \.offset) { _, track in
+                        SubtitleRow(track: track,
+                                    isActive: track.name == session.activeSubtitle?.name) {
+                            session.setSubtitleTrack(track)
                         }
                     }
                 }
-            } header: {
-                Text("Subtitles")
-                    .font(.headline)
-            }
-            
+            } header: { Text("Subtitles").font(.headline) }
+
+            Section {
+                Toggle(isOn: $session.analysis.waveformEnabled) { Text("Waveform") }
+                Toggle(isOn: $session.analysis.vectorscopeEnabled) { Text("Vectorscope") }
+                Toggle(isOn: $session.analysis.histogramEnabled) { Text("Histogram") }
+                Toggle(isOn: $session.analysis.audioMeteringEnabled) { Text("Audio Meters") }
+                if session.analysis.waveformEnabled {
+                    WaveformView(waveform: session.analysis.waveform)
+                }
+                if session.analysis.vectorscopeEnabled {
+                    VectorscopeView(vectorscope: session.analysis.vectorscope)
+                }
+                if session.analysis.histogramEnabled {
+                    HistogramView(histogram: session.analysis.histogram)
+                }
+                if let sample = session.analysis.colorPicker {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Last Picked").font(.headline)
+                        Text("#\(sample.hex8Bit)")
+                        Text("R:\(sample.r8) G:\(sample.g8) B:\(sample.b8)")
+                        Text(String(format: "H:%.0f°  S:%.2f  V:%.2f",
+                                    sample.hue, sample.saturation, sample.value))
+                    }
+                    .font(.system(.caption, design: .monospaced))
+                }
+            } header: { Text("Analyzers").font(.headline) }
+
             Spacer()
         }
         .padding()
-        .frame(width: 200)
+        .frame(width: 220)
     }
-    
+
     private func formatDuration(_ duration: CMTime) -> String {
-        let seconds = CMTimeGetSeconds(duration)
-        let mins = Int(seconds) / 60
-        let secs = Int(seconds) % 60
-        return String(format: "%d:%02d", mins, secs)
+        let s = CMTimeGetSeconds(duration)
+        return String(format: "%d:%02d", Int(s)/60, Int(s)%60)
     }
 }
 
 struct InfoRow: View {
     let label: String
     let value: String
-    
     var body: some View {
         HStack {
-            Text(label)
-                .foregroundColor(.secondary)
-            
+            Text(label).foregroundColor(.secondary)
             Spacer()
-            
-            Text(value)
-                .textSelection(.enabled)
+            Text(value).textSelection(.enabled)
         }
     }
 }
@@ -79,19 +88,12 @@ struct SubtitleRow: View {
     let track: SubtitleTrack
     let isActive: Bool
     let onSelect: () -> Void
-    
     var body: some View {
         HStack {
             Text(track.name)
-            
             Spacer()
-            
-            if isActive {
-                Image(systemName: "checkmark")
-            }
+            if isActive { Image(systemName: "checkmark") }
         }
-        .onTapGesture {
-            onSelect()
-        }
+        .onTapGesture { onSelect() }
     }
 }

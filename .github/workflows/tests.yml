@@ -1,0 +1,106 @@
+name: TitanPlayer tests
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'TitanPlayer/**'
+      - 'Benchmarks/**'
+      - 'TitanPlayerUITests/**'
+      - 'TitanPlayer.xcodeproj/**'
+      - 'docs/superpowers/specs/**'
+      - 'docs/superpowers/plans/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'coverage.threshold.json'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'
+
+jobs:
+  swiftpm-build:
+    name: SwiftPM build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd TitanPlayer && swift build -j 1
+
+  swiftpm-tests:
+    name: SwiftPM tests (XCTest, ASAN leak detection)
+    runs-on: macos-latest
+    needs: swiftpm-build
+    env:
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd TitanPlayer && swift test --parallel
+
+  coverage-gate:
+    name: Coverage gate (llvm-cov)
+    runs-on: macos-latest
+    needs: swiftpm-tests
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd TitanPlayer && swift test --enable-code-coverage --parallel
+      - run: python3 scripts/coverage-gate.py
+      - run: bash scripts/check-test-parity.sh
+
+  benchmarks-smoke:
+    name: Benchmarks (smoke, per PR)
+    runs-on: macos-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd Benchmarks && swift build -c release
+      - run: cd Benchmarks && swift run -c release Benchmarks --smoke
+
+  benchmarks-full:
+    name: Benchmarks (full, nightly on main)
+    runs-on: macos-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd Benchmarks && swift build -c release
+      - run: cd Benchmarks && swift run -c release Benchmarks
+
+  hardware-capabilities:
+    name: Hardware capability smoke + sysctl evidence
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Capture host sysctl evidence
+        run: |
+          {
+            echo "### Host sysctl evidence"
+            echo "hw.model = $(sysctl -n hw.model)"
+            echo "hw.machine = $(sysctl -n hw.machine)"
+            echo "machdep.cpu.brand_string = $(sysctl -n machdep.cpu.brand_string)"
+          } >> docs/M_COMPAT_VALIDATION_LOG.md
+      - run: cd TitanPlayer && swift test --filter Hardware --parallel
+
+  ui-tests:
+    name: UI tests (XCUITest, nightly on main)
+    runs-on: macos-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate Xcode project (xcodegen)
+        run: |
+          brew install xcodegen || true
+          mv TitanPlayer.xcodeproj TitanPlayer.xcodeproj.original
+          xcodegen generate --spec TitanPlayer.xcodeproj/project.yml.suggested
+      - run: make ui-tests
+
+  fixture-integrity:
+    name: Fixture integrity smoke
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -euo pipefail
+          FIX="TitanPlayer/Tests/Fixtures/test.mp4"
+          test -s "$FIX" || (echo "FAIL: $FIX missing or empty"; exit 1)
+          file "$FIX"
+          ls -la "$FIX"

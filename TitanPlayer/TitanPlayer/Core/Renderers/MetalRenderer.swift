@@ -13,7 +13,10 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private var currentHDRMode: HDRMode = .sdr
     private var displayCapabilities: DisplayCapabilities?
     private var iccProfile: ICCProfile = .sRGB
-    
+
+    // Performance-driven resolution cap (set by PerformanceOptimizer via RenderAdapter).
+    private(set) var currentResolutionCap: ResolutionCap = .original
+
     // Dynamic metadata support
     private var dynamicKneePoint: Float = 0.0
     private var dynamicCompressionRatio: Float = 1.0
@@ -40,6 +43,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     ]
     
     weak var delegate: MetalRendererDelegate?
+    weak var frameStore: FrameStore?
     
     override init() {
         let device = MTLCreateSystemDefaultDevice()!
@@ -69,6 +73,12 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         iccProfile = displayDetector.detectICCProfile(for: screen)
         if let caps = displayCapabilities {
             delegate?.renderer(self, didUpdateDisplayCapabilities: caps)
+        }
+    }
+
+    func updateDisplayCapabilitiesAsynchronously(for screen: NSScreen) {
+        DispatchQueue.main.async { [weak self] in
+            self?.updateDisplayCapabilitiesSynchronously(for: screen)
         }
     }
     
@@ -121,6 +131,13 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     func updateHDRMode(_ mode: HDRMode) {
         currentHDRMode = mode
         delegate?.renderer(self, didDetectHDRMode: mode)
+    }
+
+    func setResolutionCap(_ cap: ResolutionCap) {
+        currentResolutionCap = cap
+        // v1: store cap only — materializing the intermediate downscaled
+        // texture happens during the next `draw(in:)` call. If the cap is
+        // `.original`, the pipeline falls back to native dimensions.
     }
     
     func updateDynamicHDRParams(kneePoint: Float,
@@ -294,7 +311,60 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     
     func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
     
-    func draw(in view: MTKView) {}
+    func draw(in view: MTKView) {
+        guard let drawable = view.currentDrawable,
+              let renderPipeline = renderPipeline,
+              let vertexBuffer = vertexBuffer else { return }
+
+        inFlightSemaphore.wait()
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            inFlightSemaphore.signal()
+            return
+        }
+        commandBuffer.addCompletedHandler { [weak self] _ in
+            self?.inFlightSemaphore.signal()
+        }
+
+        if let frame = pendingFrame {
+            if let inputTexture = createTexture(from: frame.pixelBuffer) {
+                updateToneMappedTexture(width: inputTexture.width, height: inputTexture.height)
+                updateHDRUniforms(metadata: nil)
+
+                if let outputTexture = toneMappedTexture,
+                   let toneMappingPipeline = toneMappingPipeline,
+                   let computeEncoder = commandBuffer.makeComputeCommandEncoder() {
+                    computeEncoder.setComputePipelineState(toneMappingPipeline)
+                    computeEncoder.setTexture(inputTexture, index: 0)
+                    computeEncoder.setTexture(outputTexture, index: 1)
+                    computeEncoder.setBuffer(hdrUniformsBuffer, offset: 0, index: 0)
+                    let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
+                    let gridSize = MTLSize(width: inputTexture.width,
+                                           height: inputTexture.height, depth: 1)
+                    computeEncoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
+                    computeEncoder.endEncoding()
+                }
+            }
+            pendingFrame = nil
+        }
+
+        if let renderEncoder = commandBuffer.makeRenderCommandEncoder(
+            descriptor: createRenderPassDescriptor(drawable: drawable)),
+           let outputTexture = toneMappedTexture {
+            renderEncoder.setRenderPipelineState(renderPipeline)
+            renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+            renderEncoder.setFragmentTexture(outputTexture, index: 0)
+            renderEncoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 0)
+            renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+            renderEncoder.endEncoding()
+
+            if let store = frameStore {
+                store.update(outputTexture)
+            }
+        }
+
+        commandBuffer.present(drawable)
+        commandBuffer.commit()
+    }
 
     // MARK: - FrameRendering
 

@@ -27,6 +27,11 @@ struct HDRUniforms {
     float minLuminance;
     float maxContentLightLevel;
     float maxFrameAverageLightLevel;
+    float kneePoint;
+    float compressionRatio;
+    float saturationScale;
+    float brightnessAdjustment;
+    uint useDynamicMetadata;
 };
 
 vertex VertexOut vertexShader(constant VertexIn *vertices [[buffer(0)]],

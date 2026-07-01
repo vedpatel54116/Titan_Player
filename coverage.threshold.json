@@ -1,0 +1,9 @@
+{
+  "total_pct": 90.0,
+  "per_file_min_pct": 70.0,
+  "ignored_patterns": [
+    "TitanPlayer/TitanPlayer/UI/**",
+    "TitanPlayer/TitanPlayer/Resources/**",
+    "TitanPlayer/TitanPlayer/Core/Hardware/enum_cases_only/**"
+  ]
+}

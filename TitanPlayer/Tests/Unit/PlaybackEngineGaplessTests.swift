@@ -3,8 +3,12 @@ import XCTest
 
 @MainActor
 final class PlaybackEngineGaplessTests: XCTestCase {
+    private func makeEngine() -> PlaybackEngine {
+        PlaybackEngine(videoRenderer: MockFrameRenderer(), audioRenderer: MockAudioRenderer())
+    }
+
     func testOnNextTrackCallback() {
-        let engine = PlaybackEngine()
+        let engine = makeEngine()
         var called = false
         engine.onNextTrack = {
             called = true
@@ -13,9 +17,9 @@ final class PlaybackEngineGaplessTests: XCTestCase {
         engine.onNextTrack?()
         XCTAssertTrue(called)
     }
-    
+
     func testPlaybackEndedNotification() async {
-        let engine = PlaybackEngine()
+        let engine = makeEngine()
         var ended = false
         engine.onPlaybackEnded = {
             ended = true

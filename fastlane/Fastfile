@@ -1,0 +1,94 @@
+# fastlane/Fastfile
+# Lanes:
+#   fastlane metadata_only — push only fastlane/metadata into App Store Connect (no build, no submit)
+#   fastlane mas           — build → archive → upload to TestFlight; manual review step
+#   fastlane direct        — build → sign → notarize → package as .pkg
+#
+# Required env (in ~/.fastlane/.env):
+#   APPLE_ID, TEAM_ID, APP_STORE_TEAM_ID, MATCH_PASSWORD, NOTARY_API_KEY_PATH
+#
+# Required tools (full Xcode install):
+#   xcodebuild, xcrun notarytool, xcrun altool
+
+default_platform(:mac)
+
+platform :mac do
+  before_all do
+    setup_ci if ENV["CI"]
+  end
+
+  desc "Push only metadata to App Store Connect (no build, no submit)"
+  lane :metadata_only do
+    deliver(
+      app_identifier:          "com.titanplayer.app",
+      username:                ENV["APPLE_ID"],
+      team_id:                 ENV["APP_STORE_TEAM_ID"],
+      metadata_path:           "fastlane/metadata",
+      screenshots_path:        "fastlane/metadata/en-US/screenshots",
+      skip_binary_upload:      true,
+      skip_app_version_update: true,
+      force:                   false,
+      submit_for_review:       false
+    )
+  end
+
+  desc "Build Mac App Store archive and upload to TestFlight"
+  lane :mas do
+    match(
+      app_identifier: "com.titanplayer.app",
+      type:           "appstore",
+      readonly:       true
+    )
+
+    gym(
+      workspace:        "TitanPlayer.xcworkspace",
+      scheme:           "TitanPlayer",
+      configuration:    "AppStore",
+      output_directory: "build/mas",
+      output_name:      "TitanPlayer-MAS.pkg",
+      export_method:    "app-store",
+      export_options: {
+        provisioningProfiles: {
+          "com.titanplayer.app" => "match AppStore com.titanplayer.app"
+        }
+      }
+    )
+
+    # Apple policy: a human reviews the binary before submitting for review.
+    UI.message("Upload to TestFlight complete. Open App Store Connect and submit for review manually.")
+  end
+
+  desc "Build, sign, notarize a Developer-ID .pkg for direct distribution"
+  lane :direct do
+    match(
+      app_identifier: "com.titanplayer.app",
+      type:           "developer_id",
+      readonly:       true
+    )
+
+    gym(
+      workspace:        "TitanPlayer.xcworkspace",
+      scheme:           "TitanPlayer",
+      configuration:    "Direct",
+      output_directory: "build/direct",
+      output_name:      "TitanPlayer-Direct.pkg",
+      export_method:    "developer-id",
+      export_options: {
+        signingStyle: "manual",
+        provisioningProfiles: {
+          "com.titanplayer.app" => "match DeveloperID com.titanplayer.app"
+        }
+      }
+    )
+
+    notarize(
+      package:      "build/direct/TitanPlayer-Direct.pkg",
+      bundle_id:    "com.titanplayer.app",
+      username:     ENV["APPLE_ID"],
+      asc_provider: ENV["TEAM_ID"],
+      api_key_path: ENV["NOTARY_API_KEY_PATH"]
+    )
+
+    UI.message("Notarization complete. Distribute via your CDN / GitHub Releases.")
+  end
+end

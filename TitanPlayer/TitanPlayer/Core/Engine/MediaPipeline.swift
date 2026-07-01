@@ -11,8 +11,8 @@ class MediaPipeline: ObservableObject {
     private var demuxer: MediaDemuxing?
     private var decoder: MediaDecoding?
     private let timeObserver = TimeObserver()
-    
-    var renderer: (any FrameRendering)?
+    private let videoRenderer: VideoRenderer
+    var renderer: (any FrameRendering)? { videoRenderer }
 
     private let pipelineQueue = DispatchQueue(label: "com.titanplayer.pipeline", qos: .userInitiated)
     private var packetTask: Task<Void, Never>?
@@ -29,27 +29,50 @@ class MediaPipeline: ObservableObject {
         playState = .loading
         
         do {
-            // Probe file to determine backend
             let probeDemuxer = FFmpegDemuxer()
             let info = try await probeDemuxer.open(url: url)
-            probeDemuxer.close()
             
             self.mediaInfo = info
             timeObserver.duration = info.duration.seconds
             
-            // Select appropriate backend
             if shouldUseAVFoundation(for: info) {
-                demuxer = AVFoundationDemuxer()
+                probeDemuxer.close()
+                let avDemuxer = AVFoundationDemuxer()
                 decoder = AVFoundationDecoder()
+                _ = try await avDemuxer.open(url: url)
+                demuxer = avDemuxer
             } else {
-                demuxer = FFmpegDemuxer()
+                demuxer = probeDemuxer
                 decoder = FFmpegDecoder()
             }
+
+            if let videoTrack = info.videoTracks.first {
+                try decoder?.configure(for: videoTrack)
+            }
             
-            // Open with selected backend
-            _ = try await demuxer?.open(url: url)
             playState = .paused
             
+        } catch {
+            playState = .error(error.localizedDescription)
+        }
+    }
+    
+    func openStream(session: DASHStreamSession) async {
+        playState = .loading
+
+        do {
+            let info = try await session.open()
+            self.mediaInfo = info
+            timeObserver.duration = info.duration.seconds
+
+            self.demuxer = session
+
+            if let videoTrack = info.videoTracks.first {
+                decoder = FFmpegDecoder()
+                try decoder?.configure(for: videoTrack)
+            }
+
+            playState = .paused
         } catch {
             playState = .error(error.localizedDescription)
         }
@@ -109,6 +132,7 @@ class MediaPipeline: ObservableObject {
     
     private func processFrame(_ frame: MediaFrame) {
         if case let .video(videoFrame) = frame {
+            timeObserver.update(to: videoFrame.timestamp)
             let currentRenderer = renderer
             Task { @MainActor in
                 try? await currentRenderer?.render(videoFrame)
@@ -121,16 +145,20 @@ class MediaPipeline: ObservableObject {
         processFrame(frame)
     }
     
-    init(renderer: FrameRendering? = nil) {
-        self.renderer = renderer
-        if self.renderer == nil {
-            self.renderer = try? MetalRenderer.make()
-        }
+    init(videoRenderer: VideoRenderer) {
+        self.videoRenderer = videoRenderer
     }
 
     private func shouldUseAVFoundation(for info: MediaInfo) -> Bool {
         // Determine if AVFoundation can handle this format
         let supportedCodecs = ["h264", "hevc", "prores", "aac", "alac"]
         return info.videoTracks.allSatisfy { supportedCodecs.contains($0.codec.lowercased()) }
+    }
+}
+
+extension MediaPipeline: AudioTappable {
+    var audioTap: AudioTap? {
+        get { decoder?.audioTap }
+        set { decoder?.audioTap = newValue }
     }
 }

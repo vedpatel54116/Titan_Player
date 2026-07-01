@@ -3,6 +3,8 @@ import CoreMedia
 import VideoToolbox
 
 class AVFoundationDecoder: MediaDecoding {
+    var audioTap: ((AudioFrame) -> Void)?
+
     private var decompressionSession: VTDecompressionSession?
     private var formatDescription: CMVideoFormatDescription?
     

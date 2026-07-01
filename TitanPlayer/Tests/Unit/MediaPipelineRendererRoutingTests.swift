@@ -8,8 +8,7 @@ final class MediaPipelineRendererRoutingTests: XCTestCase {
 
     func testVideoFrameDispatchesToInjectedRenderer() async throws {
         let mock = MockFrameRenderer()
-        let pipeline = MediaPipeline()
-        pipeline.renderer = mock
+        let pipeline = MediaPipeline(videoRenderer: mock, audioRenderer: MockAudioRenderer())
 
         let pixelBuffer = makeBlankPixelBuffer()
         let frame = MediaFrame.video(VideoFrame(
@@ -31,8 +30,7 @@ final class MediaPipelineRendererRoutingTests: XCTestCase {
 
     func testAudioFrameDoesNotDispatchToRenderer() {
         let mock = MockFrameRenderer()
-        let pipeline = MediaPipeline()
-        pipeline.renderer = mock
+        let pipeline = MediaPipeline(videoRenderer: mock, audioRenderer: MockAudioRenderer())
 
         let audio = AudioFrame(
             buffer: [Float](repeating: 0, count: 256),

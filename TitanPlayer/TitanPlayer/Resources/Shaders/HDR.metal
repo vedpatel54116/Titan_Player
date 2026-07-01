@@ -22,13 +22,39 @@ kernel void hdrToneMapping(
     
     color = uniforms.colorMatrix * color;
     
-    color = acesToneMap(color);
+    if (uniforms.useDynamicMetadata == 1) {
+        color = dynamicToneMap(color, uniforms);
+    } else {
+        color = acesToneMap(color);
+    }
+    
+    color = applyDynamicAdjustments(color, uniforms);
     
     if (uniforms.isHDRDisplay == 0) {
         color = linearToSRGB(color);
     }
     
     outputTexture.write(float4(color, 1.0), gid);
+}
+
+float3 dynamicToneMap(float3 color, constant HDRUniforms &uniforms) {
+    float3 compressed = color;
+    float maxComponent = max(compressed.r, max(compressed.g, compressed.b));
+    
+    if (maxComponent > uniforms.kneePoint) {
+        float3 excess = compressed - uniforms.kneePoint;
+        float3 compressedExcess = excess * uniforms.compressionRatio;
+        compressed = uniforms.kneePoint + compressedExcess;
+    }
+    
+    return acesToneMap(compressed);
+}
+
+float3 applyDynamicAdjustments(float3 color, constant HDRUniforms &uniforms) {
+    float luma = dot(color, float3(0.2126, 0.7152, 0.0722));
+    color = mix(float3(luma), color, uniforms.saturationScale);
+    color += uniforms.brightnessAdjustment;
+    return color;
 }
 
 float3 pqToLinear(float3 pq) {

@@ -1,0 +1,49 @@
+name: dist-prep-check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'fastlane/**'
+      - 'TitanPlayer/TitanPlayer/Info.plist'
+      - 'TitanPlayer/TitanPlayer/TitanPlayer.entitlements'
+      - 'TitanPlayer/TitanPlayer/TitanPlayer.Direct.entitlements'
+      - 'TitanPlayer/TitanPlayer/Resources/Assets.xcassets/**'
+      - 'TitanPlayer/project.yml'
+      - 'scripts/render-placeholder-icon.swift'
+      - 'scripts/dist-prep-check.sh'
+      - 'LICENSE'
+      - 'PRIVACY.md'
+      - '.github/workflows/dist-prep.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'fastlane/**'
+      - 'TitanPlayer/TitanPlayer/Info.plist'
+      - 'TitanPlayer/TitanPlayer/TitanPlayer.entitlements'
+      - 'TitanPlayer/TitanPlayer/TitanPlayer.Direct.entitlements'
+      - 'TitanPlayer/TitanPlayer/Resources/Assets.xcassets/**'
+      - 'TitanPlayer/project.yml'
+      - 'scripts/render-placeholder-icon.swift'
+      - 'scripts/dist-prep-check.sh'
+      - 'LICENSE'
+      - 'PRIVACY.md'
+      - '.github/workflows/dist-prep.yml'
+
+jobs:
+  dist-prep-check:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install xcodegen for pbxproj verification
+        run: brew install xcodegen
+      - name: Generate xcodeproj (linted, not committed)
+        run: cd TitanPlayer && xcodegen generate --spec project.yml --project ..
+      - name: Verify xcodeproj generation succeeded
+        run: |
+          if [[ ! -f TitanPlayer.xcodeproj/project.pbxproj ]]; then
+            echo "MISSING pbxproj" && exit 1
+          fi
+          echo "ok pbxproj $(wc -l < TitanPlayer.xcodeproj/project.pbxproj) lines"
+      - name: Run dist-prep-check
+        run: make dist-prep-check

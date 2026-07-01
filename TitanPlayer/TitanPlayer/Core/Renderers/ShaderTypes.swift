@@ -27,6 +27,11 @@ struct HDRUniforms {
     var minLuminance: Float
     var maxContentLightLevel: Float
     var maxFrameAverageLightLevel: Float
+    var kneePoint: Float
+    var compressionRatio: Float
+    var saturationScale: Float
+    var brightnessAdjustment: Float
+    var useDynamicMetadata: UInt32
 }
 
 enum HDRModeRaw: UInt32 {
