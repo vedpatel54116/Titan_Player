@@ -157,6 +157,12 @@ final class PlaybackSession: ObservableObject {
         installKeyMonitor()
         installDisplayBindings()
         SessionLocator.shared.attach(self)
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationWillTerminate),
+            name: NSApplication.willTerminateNotification,
+            object: nil
+        )
     }
 
     var isMediaLoaded: Bool {
@@ -272,6 +278,10 @@ final class PlaybackSession: ObservableObject {
         engine.stop()
         subtitleManager.clear()
         performance.observe(settings: nil)
+        stopAccessingCurrentResource()
+    }
+
+    @objc private func applicationWillTerminate() {
         stopAccessingCurrentResource()
     }
 
