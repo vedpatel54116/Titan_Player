@@ -108,12 +108,12 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private func setupPipelines() {
         guard let library = device.makeDefaultLibrary() else { return }
         
-        if let toneMappingFunction = library.makeFunction(name: "hdrToneMapping") {
+        if let toneMappingFunction = library.makeFunction(name: "hdr_tone_mapping") {
             toneMappingPipeline = try? device.makeComputePipelineState(function: toneMappingFunction)
         }
         
         let vertexFunction = library.makeFunction(name: "vertexShader")
-        let fragmentFunction = library.makeFunction(name: "fragmentShader")
+        let fragmentFunction = library.makeFunction(name: "video_fragment_shader")
         
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.vertexFunction = vertexFunction
@@ -240,7 +240,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.vertexFunction = device.makeDefaultLibrary()?.makeFunction(name: "vertexShader")
-        pipelineDescriptor.fragmentFunction = device.makeDefaultLibrary()?.makeFunction(name: "fragmentShader")
+        pipelineDescriptor.fragmentFunction = device.makeDefaultLibrary()?.makeFunction(name: "video_fragment_shader")
         pipelineDescriptor.colorAttachments[0].pixelFormat = layer.pixelFormat
         
         let pipelineState = try? device.makeRenderPipelineState(descriptor: pipelineDescriptor)
