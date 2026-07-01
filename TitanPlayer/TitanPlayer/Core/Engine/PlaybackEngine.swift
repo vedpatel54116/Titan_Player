@@ -4,7 +4,7 @@ import AVFAudio
 import Combine
 
 @MainActor
-class PlaybackEngine: ObservableObject {
+class PlaybackEngine: ObservableObject, SynchronizationProvider {
     @Published var state: PlaybackState = .idle {
         didSet {
             if state == .ended {
@@ -16,6 +16,7 @@ class PlaybackEngine: ObservableObject {
     @Published var duration: TimeInterval = 0
     @Published var playbackRate: Float = 1.0
     @Published var audioDelay: TimeInterval = 0
+    var audioCurrentTime: TimeInterval { currentTime }
     @Published var lastError: PlaybackError?
     @Published var spatialAudioEnabled: Bool = true
     @Published var mediaInfo: MediaInfo? = nil
@@ -196,6 +197,7 @@ class PlaybackEngine: ObservableObject {
 
     private func setupRenderers(_ videoRenderer: VideoRenderer) {
         mediaPipeline = MediaPipeline(videoRenderer: videoRenderer)
+        mediaPipeline?.synchronizationProvider = self
     }
 
     private func setupNotifications() {
