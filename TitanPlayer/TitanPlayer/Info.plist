@@ -37,6 +37,8 @@
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
+    <key>SentryDSN</key>
+    <string>YOUR_SENTRY_DSN_HERE</string>
     <key>CFBundleDocumentTypes</key>
     <array>
         <dict>
