@@ -1,6 +1,6 @@
 # TitanPlayer Privacy Policy
 
-_Last updated: 2026-06-30_
+_Last updated: 2026-07-01_
 
 TitanPlayer is an open-source macOS video player. This page describes what
 data the application handles, why, and where it goes.
@@ -15,12 +15,41 @@ data the application handles, why, and where it goes.
 | Crash logs (only if you enable them) | Local on your Mac | Optional debugging; off by default. |
 | Crash reports you choose to send | Off-device only if you submit them yourself | You control submission; TitanPlayer has no auto-upload. |
 
+## Opt-In Telemetry (Optional)
+
+When you opt in, TitanPlayer sends anonymous data to Sentry to help improve
+the application. **No personal data is collected.** All telemetry is strictly
+opt-in and can be disabled at any time from Preferences > Privacy.
+
+### What is collected (only if you opt in):
+
+| Data | Purpose |
+|---|---|
+| Crash reports (stack traces, device info) | Fix crashes and stability issues |
+| Playback failure types (codec, resolution, error code) | Diagnose playback compatibility issues |
+| HDR mode usage (HDR10, Dolby Vision) | Understand HDR feature adoption |
+| Audio format usage (Atmos, Stereo, Spatial) | Understand audio feature adoption |
+| Performance metrics (CPU/GPU usage during 4K playback) | Optimize performance |
+
+### What is NOT collected:
+
+- Your name, email, or any personal identifiers
+- File names or paths of media you play
+- Browsing history or file system information
+- Any data when telemetry is disabled (default)
+
+### How to opt out:
+
+- **First launch:** You will be prompted once with a consent dialog
+- **Any time:** Open Preferences (Cmd+,) > Privacy > toggle off "Send anonymous crash reports"
+- **Immediate effect:** Opting out stops all data transmission immediately
+
 ## Network Uses
 
 TitanPlayer can connect to the network **only when you enable a streaming
 source yourself** — for example an HTTP Live Stream (HLS) URL, a remote
-subtitle provider, or an SMB/NFS share. TitanPlayer does not perform
-background telemetry, beaconing, or analytics of any kind.
+subtitle provider, or an SMB/NFS share. When telemetry is enabled, anonymous
+crash reports and usage statistics are sent to Sentry (getsentry.com).
 
 When the App Sandbox is enabled (Mac App Store build):
 
