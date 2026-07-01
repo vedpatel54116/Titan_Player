@@ -6,8 +6,7 @@ import Metal
 final class AnalysisPipelineIntegrationTests: XCTestCase {
     func testSessionOwnsAnalysisAndAttachesFrameStore() throws {
         guard MTLCreateSystemDefaultDevice() != nil else { throw XCTSkip("Metal unavailable") }
-        let session = PlaybackSession(videoRenderer: MockFrameRenderer(),
-                                      audioRenderer: MockAudioRenderer())
+        let session = PlaybackSession(videoRenderer: MockFrameRenderer())
         XCTAssertNotNil(session.analysis)
         XCTAssertNotNil(session.frameStore)
         // The analysis manager should not be collecting when nothing is enabled.

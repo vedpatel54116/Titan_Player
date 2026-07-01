@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class PlaybackEngineRateTests: XCTestCase {
     private func makeEngine() -> PlaybackEngine {
-        PlaybackEngine(videoRenderer: MockFrameRenderer(), audioRenderer: MockAudioRenderer())
+        PlaybackEngine(videoRenderer: MockFrameRenderer())
     }
 
     func testSetPlaybackRate() {

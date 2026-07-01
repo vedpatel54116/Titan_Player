@@ -1,4 +1,5 @@
 import XCTest
+import AVFAudio
 @testable import TitanPlayer
 
 @MainActor

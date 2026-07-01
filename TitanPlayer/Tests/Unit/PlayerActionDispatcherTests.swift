@@ -11,8 +11,7 @@ final class PlayerActionDispatcherTests: XCTestCase {
         openFileCalls:          (() -> Void)? = nil
     ) -> PlayerActionDispatcher {
         let session = PlaybackSession(
-            videoRenderer: MockFrameRenderer(),
-            audioRenderer: MockAudioRenderer()
+            videoRenderer: MockFrameRenderer()
         )
         var side = DispatcherSideEffects()
         if let cb = toggleFullscreenCalls { side.toggleFullscreen = cb }

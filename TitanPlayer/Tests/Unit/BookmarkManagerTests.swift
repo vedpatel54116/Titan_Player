@@ -6,8 +6,7 @@ final class BookmarkManagerTests: XCTestCase {
     private let defaultsKey = "SecurityScopedBookmarks"
 
     private func makeSession() -> PlaybackSession {
-        PlaybackSession(videoRenderer: MockFrameRenderer(),
-                        audioRenderer: MockAudioRenderer())
+        PlaybackSession(videoRenderer: MockFrameRenderer())
     }
 
     override func setUp() {

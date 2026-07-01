@@ -5,8 +5,7 @@ import CoreMedia
 @MainActor
 final class PlaybackSessionTests: XCTestCase {
     private func makeSession() -> PlaybackSession {
-        PlaybackSession(videoRenderer: MockFrameRenderer(),
-                        audioRenderer: MockAudioRenderer())
+        PlaybackSession(videoRenderer: MockFrameRenderer())
     }
 
     func testInitialState() {

@@ -1,7 +1,7 @@
 import Foundation
 @testable import TitanPlayer
 
-final class MockNetworkMonitor: NetworkMonitorProtocol {
+final class MockNetworkMonitorForOptimizer: NetworkMonitorProtocol {
     var reach: Reach = .wifi
     private(set) var thermalState: ProcessInfo.ThermalState = .nominal
 

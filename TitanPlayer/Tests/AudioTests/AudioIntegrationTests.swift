@@ -1,4 +1,5 @@
 import XCTest
+import AVFAudio
 @testable import TitanPlayer
 
 @MainActor
@@ -6,8 +7,7 @@ final class AudioIntegrationTests: XCTestCase {
     func testPlaybackEngineUsesSpatialAudio() throws {
         let audioEngine = try AudioEngine()
         let playbackEngine = PlaybackEngine(
-            videoRenderer: MockFrameRenderer(),
-            audioRenderer: MockAudioRenderer()
+            videoRenderer: MockFrameRenderer()
         )
 
         playbackEngine.setSpatialAudioEngine(audioEngine)
@@ -18,8 +18,7 @@ final class AudioIntegrationTests: XCTestCase {
     func testPlaybackEngineCanToggleSpatialAudio() throws {
         let audioEngine = try AudioEngine()
         let playbackEngine = PlaybackEngine(
-            videoRenderer: MockFrameRenderer(),
-            audioRenderer: MockAudioRenderer()
+            videoRenderer: MockFrameRenderer()
         )
         playbackEngine.setSpatialAudioEngine(audioEngine)
 

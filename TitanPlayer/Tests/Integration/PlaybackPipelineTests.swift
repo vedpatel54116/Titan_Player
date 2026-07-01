@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class PlaybackPipelineTests: XCTestCase {
     private func makePipeline() -> MediaPipeline {
-        MediaPipeline(videoRenderer: MockFrameRenderer(), audioRenderer: MockAudioRenderer())
+        MediaPipeline(videoRenderer: MockFrameRenderer())
     }
 
     func testPipelineOpensMediaFile() async throws {

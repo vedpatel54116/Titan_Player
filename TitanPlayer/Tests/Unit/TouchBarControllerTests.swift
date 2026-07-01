@@ -6,8 +6,7 @@ import AppKit
 final class TouchBarControllerTests: XCTestCase {
     private func makeController() -> (TouchBarController, PlaybackSession) {
         let session = PlaybackSession(
-            videoRenderer: MockFrameRenderer(),
-            audioRenderer: MockAudioRenderer()
+            videoRenderer: MockFrameRenderer()
         )
         let ctrl = TouchBarController(session: session)
         return (ctrl, session)
@@ -63,8 +62,7 @@ final class TouchBarControllerTests: XCTestCase {
         let ctrl: TouchBarController
         do {
             let session = PlaybackSession(
-                videoRenderer: MockFrameRenderer(),
-                audioRenderer: MockAudioRenderer())
+                videoRenderer: MockFrameRenderer())
             ctrl = TouchBarController(session: session)
         }
         XCTAssertNil(ctrl.session)

@@ -1,5 +1,6 @@
 import Foundation
 import AVFAudio
+@testable import TitanPlayer
 
 final class MockAudioRenderer: AudioRenderer {
     private(set) var scheduledBuffers: [AVAudioPCMBuffer] = []

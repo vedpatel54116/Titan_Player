@@ -4,7 +4,7 @@ import XCTest
 @MainActor
 final class PlaybackEngineSyncTests: XCTestCase {
     private func makeEngine() -> PlaybackEngine {
-        PlaybackEngine(videoRenderer: MockFrameRenderer(), audioRenderer: MockAudioRenderer())
+        PlaybackEngine(videoRenderer: MockFrameRenderer())
     }
 
     func testAudioDelayProperty() {

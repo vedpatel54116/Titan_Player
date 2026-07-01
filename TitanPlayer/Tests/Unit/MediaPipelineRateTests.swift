@@ -3,7 +3,7 @@ import XCTest
 
 final class MediaPipelineRateTests: XCTestCase {
     private func makePipeline() -> MediaPipeline {
-        MediaPipeline(videoRenderer: MockFrameRenderer(), audioRenderer: MockAudioRenderer())
+        MediaPipeline(videoRenderer: MockFrameRenderer())
     }
 
     func testSetPlaybackRate() async {
