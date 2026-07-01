@@ -15,7 +15,8 @@ final class MediaPipelineRendererRoutingTests: XCTestCase {
             pixelBuffer: pixelBuffer,
             timestamp: .zero,
             duration: CMTime(value: 16, timescale: 600),
-            colorSpace: .sRGB
+            colorSpace: .sRGB,
+            sampleBuffer: nil
         ))
 
         // Trigger the routing path directly on the @MainActor.

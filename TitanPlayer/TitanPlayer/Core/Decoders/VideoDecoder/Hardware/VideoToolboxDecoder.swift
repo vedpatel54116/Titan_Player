@@ -82,16 +82,10 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
 
     private func submitPacket(_ packet: MediaPacket,
                               continuation: CheckedContinuation<CMSampleBuffer, Error>) {
-        var session: VTDecompressionSession?
-        var formatDesc: CMVideoFormatDescription?
-        var pool: CVPixelBufferPool?
-
-        lock.withLock {
-            session = self.session
-            formatDesc = self.formatDescription
-            pool = self.pixelBufferPool
-            self.pendingContinuation = continuation
+        let (session, formatDesc, pool): (VTDecompressionSession?, CMVideoFormatDescription?, CVPixelBufferPool?) = lock.withLock {
+            (self.session, self.formatDescription, self.pixelBufferPool)
         }
+        lock.withLock { self.pendingContinuation = continuation }
 
         guard let session = session, let formatDescription = formatDesc else {
             lock.withLock { self.pendingContinuation = nil }
@@ -215,15 +209,15 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
     }
 
     private func queryHardwareUsage(session: VTDecompressionSession) -> Bool {
-        var property: CFBoolean?
+        var property: Unmanaged<CFBoolean>?
         let status = VTSessionCopyProperty(
             session,
             key: kVTDecompressionPropertyKey_UsingHardwareAcceleratedVideoDecoder,
             allocator: kCFAllocatorDefault,
             valueOut: &property
         )
-        if status == noErr, let property = property {
-            return property == kCFBooleanTrue
+        if status == noErr, let value = property?.takeRetainedValue() {
+            return value == kCFBooleanTrue
         }
         return false
     }

@@ -28,7 +28,8 @@ final class VideoDecodingAdapter: MediaDecoding {
                 pixelBuffer: pixelBuffer,
                 timestamp: packet.timestamp,
                 duration: packet.duration,
-                colorSpace: .sRGB
+                colorSpace: .sRGB,
+                sampleBuffer: sampleBuffer
             )
             return .video(videoFrame)
         case .pixelBuffer(let pixelBuffer):
@@ -36,7 +37,8 @@ final class VideoDecodingAdapter: MediaDecoding {
                 pixelBuffer: pixelBuffer,
                 timestamp: packet.timestamp,
                 duration: packet.duration,
-                colorSpace: .sRGB
+                colorSpace: .sRGB,
+                sampleBuffer: nil
             )
             return .video(videoFrame)
         }

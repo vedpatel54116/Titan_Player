@@ -34,6 +34,14 @@ struct HDRUniforms {
     var useDynamicMetadata: UInt32
 }
 
+struct YCbCrUniforms {
+    var yScale: Float
+    var yOffset: Float
+    var cbcrScale: Float
+    var cbcrOffset: Float
+    var isHDR: UInt32
+}
+
 enum HDRModeRaw: UInt32 {
     case sdr = 0
     case hdr10 = 1

@@ -51,11 +51,11 @@ struct DecoderSelector {
 
         let sorted = scored.sorted { $0.score.score > $1.score.score }
 
-        guard let best = sorted.first, let decoder = best.decoder as? VideoDecoding else {
+        guard let best = sorted.first else {
             return DecoderSelection(decoder: available.first!, reason: .fallback)
         }
 
-        return DecoderSelection(decoder: decoder, reason: best.score.reasons.first ?? .fallback)
+        return DecoderSelection(decoder: best.decoder, reason: best.score.reasons.first ?? .fallback)
     }
     
     // MARK: - Switch Check

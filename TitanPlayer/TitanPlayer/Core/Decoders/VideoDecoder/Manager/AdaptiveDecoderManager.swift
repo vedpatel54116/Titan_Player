@@ -28,7 +28,7 @@ class AdaptiveDecoderManager: @unchecked Sendable {
 
     // User-driven decoder preference (set via PerformanceOptimizer / external code).
     private var preference: DecoderPreference = .neutral
-    private let preferenceLock = NSLock()
+    private let preferenceLock = OSAllocatedUnfairLock()
 
     // Use actor for thread-safe state management
     private let stateActor = DecoderStateActor()
@@ -43,9 +43,9 @@ class AdaptiveDecoderManager: @unchecked Sendable {
     // MARK: - Public API
 
     func forcePreference(_ preference: DecoderPreference?) {
-        preferenceLock.lock()
-        self.preference = preference ?? .neutral
-        preferenceLock.unlock()
+        preferenceLock.withLock {
+            self.preference = preference ?? .neutral
+        }
     }
 
     func configure(for track: VideoTrackInfo) async throws {
@@ -53,9 +53,7 @@ class AdaptiveDecoderManager: @unchecked Sendable {
 
         let availableDecoders = queryAvailableDecoders(for: track)
 
-        preferenceLock.lock()
-        let pref = self.preference
-        preferenceLock.unlock()
+        let pref = preferenceLock.withLock { self.preference }
 
         let selection = decoderSelector.selectDecoder(
             for: track,

@@ -51,6 +51,7 @@ struct VideoFrame {
     let timestamp: CMTime
     let duration: CMTime
     let colorSpace: ColorSpace
+    let sampleBuffer: CMSampleBuffer?
 }
 
 enum ColorSpace {

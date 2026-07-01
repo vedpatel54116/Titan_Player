@@ -92,7 +92,8 @@ final class HDRPlaybackIntegrationTests: XCTestCase {
             pixelBuffer: makeBlankPixelBuffer(),
             timestamp: .zero,
             duration: CMTime(value: 16, timescale: 600),
-            colorSpace: .bt2020
+            colorSpace: .bt2020,
+            sampleBuffer: nil
         )
         let exp = expectation(description: "render returns")
         Task {

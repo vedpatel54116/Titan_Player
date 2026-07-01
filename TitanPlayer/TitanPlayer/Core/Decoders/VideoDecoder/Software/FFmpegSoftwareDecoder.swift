@@ -247,7 +247,7 @@ final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
             srcStride.withUnsafeBufferPointer { srcStridePtr in
                 dstData.withUnsafeMutableBufferPointer { dstPtr in
                     dstStride.withUnsafeMutableBufferPointer { dstStridePtr in
-                        sws_scale(
+                        _ = sws_scale(
                             sws,
                             srcPtr.baseAddress,
                             srcStridePtr.baseAddress,

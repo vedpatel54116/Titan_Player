@@ -20,7 +20,8 @@ class AVFoundationDecoder: MediaDecoding {
             pixelBuffer: pixelBuffer,
             timestamp: packet.timestamp,
             duration: packet.duration,
-            colorSpace: .sRGB
+            colorSpace: .sRGB,
+            sampleBuffer: nil
         ))
     }
     

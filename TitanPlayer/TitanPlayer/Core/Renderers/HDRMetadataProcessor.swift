@@ -3,8 +3,11 @@ import CoreMedia
 import CoreVideo
 import Metal
 import simd
+import os.log
 
 class HDRMetadataProcessor {
+    
+    private let logger = Logger(subsystem: "com.titanplayer", category: "HDRMetadata")
     
     // MARK: - Properties
     
@@ -73,20 +76,26 @@ class HDRMetadataProcessor {
             }
             newMode = .hdr10Plus(hdr10PlusMetadata)
             metadataChanged = true
+            logger.info("Detected HDR10+ Dynamic Metadata — kneePoint: \(String(format: "%.3f", hdr10PlusMetadata.kneePointX))")
         }
         
         if let dvMetadata = parseDolbyVisionMetadata(from: sampleBuffer) {
             dolbyVisionMetadata = dvMetadata
             newMode = .dolbyVision(dvMetadata)
             metadataChanged = true
+            logger.info("Detected Dolby Vision Metadata — profile: \(dvMetadata.profile.rawValue)")
         }
         
         if let hdr10Metadata = parseHDR10Metadata(from: sampleBuffer) {
             newMode = .hdr10(hdr10Metadata)
             metadataChanged = true
+            logger.info("Detected HDR10 Metadata — maxLum: \(String(format: "%.0f", hdr10Metadata.maxDisplayLuminance)), minLum: \(String(format: "%.4f", hdr10Metadata.minDisplayLuminance)), MaxCLL: \(String(format: "%.0f", hdr10Metadata.maxContentLightLevel)), MaxFALL: \(String(format: "%.0f", hdr10Metadata.maxFrameAverageLightLevel))")
         }
         
-        guard metadataChanged else { return nil }
+        guard metadataChanged else {
+            logger.debug("No HDR metadata detected in sample buffer (SDR content)")
+            return nil
+        }
         
         currentHDRMode = newMode
         

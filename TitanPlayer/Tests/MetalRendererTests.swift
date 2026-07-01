@@ -85,7 +85,8 @@ final class MetalRendererTests: XCTestCase {
             pixelBuffer: makeBlankPixelBuffer(),
             timestamp: .zero,
             duration: CMTime(value: 16, timescale: 600),
-            colorSpace: .sRGB
+            colorSpace: .sRGB,
+            sampleBuffer: nil
         )
         let exp = expectation(description: "render returns")
         Task {

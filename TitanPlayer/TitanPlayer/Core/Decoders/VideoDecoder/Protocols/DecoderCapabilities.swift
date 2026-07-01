@@ -23,7 +23,7 @@ enum DecoderOutputFormat: Sendable {
 
 // MARK: - Decoder Output
 
-enum DecoderOutput: Sendable {
+enum DecoderOutput: @unchecked Sendable {
     case sampleBuffer(CMSampleBuffer)
     case pixelBuffer(CVImageBuffer)
 }

@@ -2,17 +2,24 @@ import Metal
 import MetalKit
 import CoreVideo
 import simd
+import os.log
 
 class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private let device: MTLDevice
     private let commandQueue: MTLCommandQueue
     
+    private var ycbcrPipeline: MTLComputePipelineState?
     private var toneMappingPipeline: MTLComputePipelineState?
     private var renderPipeline: MTLRenderPipelineState?
+    
+    private var textureCache: CVMetalTextureCache?
     
     private var currentHDRMode: HDRMode = .sdr
     private var displayCapabilities: DisplayCapabilities?
     private var iccProfile: ICCProfile = .sRGB
+    
+    private let hdrMetadataProcessor = HDRMetadataProcessor()
+    private let logger = Logger(subsystem: "com.titanplayer", category: "MetalRenderer")
 
     // Performance-driven resolution cap (set by PerformanceOptimizer via RenderAdapter).
     private(set) var currentResolutionCap: ResolutionCap = .original
@@ -44,6 +51,9 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     
     private var displayTargets: [String: DisplayRenderTarget] = [:]
     
+    private var currentDrawableSize: CGSize = .zero
+    private var currentVideoSize: CGSize = .zero
+    
     private let vertexData: [Float] = [
         -1.0, -1.0, 0.0, 1.0,
          1.0, -1.0, 1.0, 1.0,
@@ -60,6 +70,11 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         self.device = device
         self.commandQueue = commandQueue
         super.init()
+        
+        var cache: CVMetalTextureCache?
+        CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache)
+        textureCache = cache
+        
         setupPipelines()
         setupBuffers()
         if let screen = NSScreen.main {
@@ -95,6 +110,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         displayCapabilities = displayDetector.detectCapabilities(for: screen)
         iccProfile = displayDetector.detectICCProfile(for: screen)
         if let caps = displayCapabilities {
+            hdrMetadataProcessor.updateDisplayCapabilities(caps)
             delegate?.renderer(self, didUpdateDisplayCapabilities: caps)
         }
     }
@@ -107,6 +123,10 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     
     private func setupPipelines() {
         guard let library = device.makeDefaultLibrary() else { return }
+        
+        if let ycbcrFunction = library.makeFunction(name: "ycbcr_to_rgb") {
+            ycbcrPipeline = try? device.makeComputePipelineState(function: ycbcrFunction)
+        }
         
         if let toneMappingFunction = library.makeFunction(name: "hdr_tone_mapping") {
             toneMappingPipeline = try? device.makeComputePipelineState(function: toneMappingFunction)
@@ -154,6 +174,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         iccProfile = displayDetector.detectICCProfile(for: screen)
         
         if let caps = displayCapabilities {
+            hdrMetadataProcessor.updateDisplayCapabilities(caps)
             delegate?.renderer(self, didUpdateDisplayCapabilities: caps)
         }
     }
@@ -202,6 +223,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         dynamicSaturationScale = saturationScale
         dynamicBrightnessAdjustment = brightnessAdjustment
         useDynamicMetadata = true
+        logger.info("Tone mapping update — knee: \(String(format: "%.3f", kneePoint)), compression: \(String(format: "%.3f", compressionRatio)), saturation: \(String(format: "%.3f", saturationScale)), brightness: \(String(format: "%.3f", brightnessAdjustment))")
     }
     
     func resetDynamicHDRParams() {
@@ -210,6 +232,22 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         dynamicSaturationScale = 1.0
         dynamicBrightnessAdjustment = 0.0
         useDynamicMetadata = false
+    }
+
+    private func applyMetadataUpdate(_ update: HDRMetadataProcessor.MetadataUpdate) {
+        switch update.mode {
+        case .hdr10(let meta):
+            updateHDRMode(.hdr10(meta))
+        case .hlg:
+            updateHDRMode(.hlg)
+        case .sdr:
+            updateHDRMode(.sdr)
+        case .hdr10Plus(let meta):
+            updateHDRMode(.hdr10(meta.toHDR10Metadata()))
+        case .dolbyVision:
+            updateHDRMode(.sdr)
+        }
+        hdrMetadataProcessor.updateMetalRendererUniforms(self)
     }
     
     // MARK: - Multi-Display Target Support
@@ -383,12 +421,52 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
             self?.inFlightSemaphore.signal()
         }
         
-        guard let inputTexture = createTexture(from: pixelBuffer) else {
+        guard let textures = createTextures(from: pixelBuffer),
+              let ycbcrPipeline = ycbcrPipeline else {
+            // No valid textures — clear to black
+            let desc = createRenderPassDescriptor(drawable: drawable)
+            if let enc = commandBuffer.makeRenderCommandEncoder(descriptor: desc) {
+                enc.endEncoding()
+            }
+            commandBuffer.present(drawable)
             commandBuffer.commit()
             return
         }
         
-        updateToneMappedTexture(width: inputTexture.width, height: inputTexture.height)
+        let rgbTexture = createRGBTexture(
+            width: textures.y.width,
+            height: textures.y.height
+        )
+        
+        guard let rgbTexture = rgbTexture else {
+            commandBuffer.commit()
+            return
+        }
+        
+        if let computeEncoder = commandBuffer.makeComputeCommandEncoder() {
+            var ycbcrUniforms = YCbCrUniforms(
+                yScale: 1.0,
+                yOffset: -16.0 / 255.0,
+                cbcrScale: 1.0,
+                cbcrOffset: -128.0 / 255.0,
+                isHDR: 0
+            )
+            
+            computeEncoder.setComputePipelineState(ycbcrPipeline)
+            computeEncoder.setTexture(textures.y, index: 0)
+            computeEncoder.setTexture(textures.cbcr, index: 1)
+            computeEncoder.setTexture(rgbTexture, index: 2)
+            computeEncoder.setBytes(&ycbcrUniforms,
+                                   length: MemoryLayout<YCbCrUniforms>.size,
+                                   index: 0)
+            let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
+            let gridSize = MTLSize(width: rgbTexture.width,
+                                  height: rgbTexture.height, depth: 1)
+            computeEncoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
+            computeEncoder.endEncoding()
+        }
+        
+        updateToneMappedTexture(width: rgbTexture.width, height: rgbTexture.height)
         
         guard let outputTexture = toneMappedTexture else {
             commandBuffer.commit()
@@ -400,12 +478,12 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         if let computeEncoder = commandBuffer.makeComputeCommandEncoder(),
            let toneMappingPipeline = toneMappingPipeline {
             computeEncoder.setComputePipelineState(toneMappingPipeline)
-            computeEncoder.setTexture(inputTexture, index: 0)
+            computeEncoder.setTexture(rgbTexture, index: 0)
             computeEncoder.setTexture(outputTexture, index: 1)
             computeEncoder.setBuffer(hdrUniformsBuffer, offset: 0, index: 0)
             
             let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
-            let gridSize = MTLSize(width: inputTexture.width, height: inputTexture.height, depth: 1)
+            let gridSize = MTLSize(width: rgbTexture.width, height: rgbTexture.height, depth: 1)
             computeEncoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
             computeEncoder.endEncoding()
         }
@@ -422,8 +500,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         }
         
         if let subtitleTexture = subtitleTexture,
-           let subtitlePipelineState = subtitlePipelineState,
-           let outputTexture = toneMappedTexture {
+           let subtitlePipelineState = subtitlePipelineState {
             let subtitleDescriptor = createRenderPassDescriptor(drawable: drawable)
             if let subtitleEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: subtitleDescriptor) {
                 subtitleEncoder.setRenderPipelineState(subtitlePipelineState)
@@ -439,36 +516,61 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         commandBuffer.commit()
     }
     
-    private func createTexture(from pixelBuffer: CVPixelBuffer) -> MTLTexture? {
+    private func createTextures(from pixelBuffer: CVPixelBuffer) -> (y: MTLTexture, cbcr: MTLTexture)? {
+        guard let cache = textureCache else { return nil }
+        
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
         
-        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm,
+        var yTextureRef: CVMetalTexture?
+        var cbcrTextureRef: CVMetalTexture?
+        
+        let yStatus = CVMetalTextureCacheCreateTextureFromImage(
+            kCFAllocatorDefault,
+            cache,
+            pixelBuffer,
+            nil,
+            .r8Unorm,
+            CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
+            CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
+            0,
+            &yTextureRef
+        )
+        
+        let cbcrStatus = CVMetalTextureCacheCreateTextureFromImage(
+            kCFAllocatorDefault,
+            cache,
+            pixelBuffer,
+            nil,
+            .rg8Unorm,
+            CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
+            CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
+            1,
+            &cbcrTextureRef
+        )
+        
+        guard yStatus == kCVReturnSuccess,
+              cbcrStatus == kCVReturnSuccess,
+              let yRef = yTextureRef,
+              let cbcrRef = cbcrTextureRef,
+              let yTex = CVMetalTextureGetTexture(yRef),
+              let cbcrTex = CVMetalTextureGetTexture(cbcrRef) else {
+            return nil
+        }
+        
+        return (y: yTex, cbcr: cbcrTex)
+    }
+    
+    private func createRGBTexture(width: Int, height: Int) -> MTLTexture? {
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba8Unorm,
             width: width,
             height: height,
             mipmapped: false
         )
-        textureDescriptor.usage = [.shaderRead]
-        textureDescriptor.storageMode = .managed
-        
-        guard let texture = device.makeTexture(descriptor: textureDescriptor) else { return nil }
-        
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-        
-        if let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) {
-            let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
-            texture.replace(
-                region: MTLRegion(origin: MTLOrigin(x: 0, y: 0, z: 0),
-                                 size: MTLSize(width: width, height: height, depth: 1)),
-                mipmapLevel: 0,
-                withBytes: baseAddress,
-                bytesPerRow: bytesPerRow
-            )
-        }
-        
-        return texture
+        descriptor.usage = [.shaderRead, .shaderWrite]
+        descriptor.storageMode = .private
+        return device.makeTexture(descriptor: descriptor)
     }
     
     private func updateToneMappedTexture(width: Int, height: Int) {
@@ -533,12 +635,46 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         return descriptor
     }
     
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        currentDrawableSize = size
+        updateAspectFitVertices()
+    }
+    
+    private func updateAspectFitVertices() {
+        guard let vertexBuffer = vertexBuffer,
+              currentVideoSize.width > 0, currentVideoSize.height > 0,
+              currentDrawableSize.width > 0, currentDrawableSize.height > 0 else { return }
+        
+        let videoAspect = Float(currentVideoSize.width) / Float(currentVideoSize.height)
+        let drawableAspect = Float(currentDrawableSize.width) / Float(currentDrawableSize.height)
+        
+        var scaleX: Float = 1.0
+        var scaleY: Float = 1.0
+        
+        if videoAspect > drawableAspect {
+            scaleY = drawableAspect / videoAspect
+        } else {
+            scaleX = videoAspect / drawableAspect
+        }
+        
+        let vertexData: [Float] = [
+            -scaleX, -scaleY, 0.0, 1.0,
+             scaleX, -scaleY, 1.0, 1.0,
+            -scaleX,  scaleY, 0.0, 0.0,
+             scaleX,  scaleY, 1.0, 0.0,
+        ]
+        
+        memcpy(vertexBuffer.contents(), vertexData, vertexData.count * MemoryLayout<Float>.size)
+    }
     
     func draw(in view: MTKView) {
         guard let drawable = view.currentDrawable,
               let renderPipeline = renderPipeline,
               let vertexBuffer = vertexBuffer else { return }
+
+        if currentDrawableSize == .zero {
+            currentDrawableSize = view.drawableSize
+        }
 
         inFlightSemaphore.wait()
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
@@ -550,22 +686,63 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         }
 
         if let frame = pendingFrame {
-            if let inputTexture = createTexture(from: frame.pixelBuffer) {
-                updateToneMappedTexture(width: inputTexture.width, height: inputTexture.height)
-                updateHDRUniforms(metadata: nil)
-
-                if let outputTexture = toneMappedTexture,
-                   let toneMappingPipeline = toneMappingPipeline,
+            if let textures = createTextures(from: frame.pixelBuffer),
+               let ycbcrPipeline = ycbcrPipeline {
+                currentVideoSize = CGSize(
+                    width: textures.y.width,
+                    height: textures.y.height
+                )
+                updateAspectFitVertices()
+                
+                let rgbTexture = createRGBTexture(
+                    width: textures.y.width,
+                    height: textures.y.height
+                )
+                
+                if let rgbTexture = rgbTexture,
                    let computeEncoder = commandBuffer.makeComputeCommandEncoder() {
-                    computeEncoder.setComputePipelineState(toneMappingPipeline)
-                    computeEncoder.setTexture(inputTexture, index: 0)
-                    computeEncoder.setTexture(outputTexture, index: 1)
-                    computeEncoder.setBuffer(hdrUniformsBuffer, offset: 0, index: 0)
+                    var ycbcrUniforms = YCbCrUniforms(
+                        yScale: 1.0,
+                        yOffset: -16.0 / 255.0,
+                        cbcrScale: 1.0,
+                        cbcrOffset: -128.0 / 255.0,
+                        isHDR: 0
+                    )
+                    
+                    computeEncoder.setComputePipelineState(ycbcrPipeline)
+                    computeEncoder.setTexture(textures.y, index: 0)
+                    computeEncoder.setTexture(textures.cbcr, index: 1)
+                    computeEncoder.setTexture(rgbTexture, index: 2)
+                    computeEncoder.setBytes(&ycbcrUniforms,
+                                           length: MemoryLayout<YCbCrUniforms>.size,
+                                           index: 0)
                     let threadGroupSize = MTLSize(width: 16, height: 16, depth: 1)
-                    let gridSize = MTLSize(width: inputTexture.width,
-                                           height: inputTexture.height, depth: 1)
+                    let gridSize = MTLSize(width: rgbTexture.width,
+                                          height: rgbTexture.height, depth: 1)
                     computeEncoder.dispatchThreads(gridSize, threadsPerThreadgroup: threadGroupSize)
                     computeEncoder.endEncoding()
+                    
+                    updateToneMappedTexture(width: rgbTexture.width, height: rgbTexture.height)
+
+                    if let sampleBuffer = frame.sampleBuffer,
+                       let update = hdrMetadataProcessor.processMetadata(from: sampleBuffer) {
+                        applyMetadataUpdate(update)
+                    }
+                    updateHDRUniforms(metadata: nil)
+                    
+                    if let outputTexture = toneMappedTexture,
+                       let toneMappingPipeline = toneMappingPipeline,
+                       let toneEncoder = commandBuffer.makeComputeCommandEncoder() {
+                        toneEncoder.setComputePipelineState(toneMappingPipeline)
+                        toneEncoder.setTexture(rgbTexture, index: 0)
+                        toneEncoder.setTexture(outputTexture, index: 1)
+                        toneEncoder.setBuffer(hdrUniformsBuffer, offset: 0, index: 0)
+                        let tgSize = MTLSize(width: 16, height: 16, depth: 1)
+                        let gSize = MTLSize(width: rgbTexture.width,
+                                           height: rgbTexture.height, depth: 1)
+                        toneEncoder.dispatchThreads(gSize, threadsPerThreadgroup: tgSize)
+                        toneEncoder.endEncoding()
+                    }
                 }
             }
             pendingFrame = nil
@@ -583,6 +760,12 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
 
             if let store = frameStore {
                 store.update(outputTexture)
+            }
+        } else {
+            // No frame available — clear to black
+            if let renderEncoder = commandBuffer.makeRenderCommandEncoder(
+                descriptor: createRenderPassDescriptor(drawable: drawable)) {
+                renderEncoder.endEncoding()
             }
         }
 
