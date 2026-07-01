@@ -8,10 +8,18 @@ let package = Package(
         .package(url: "https://github.com/superuser404notfound/FFmpegBuild", branch: "main")
     ],
     targets: [
+        .systemLibrary(
+            name: "CLibAss",
+            pkgConfig: "libass",
+            providers: [
+                .brew(["libass"])
+            ]
+        ),
         .executableTarget(
             name: "TitanPlayer",
             dependencies: [
                 "FFmpegBuild",
+                "CLibAss",
                 .product(name: "Libavcodec", package: "FFmpegBuild"),
                 .product(name: "Libavformat", package: "FFmpegBuild"),
                 .product(name: "Libavutil", package: "FFmpegBuild"),

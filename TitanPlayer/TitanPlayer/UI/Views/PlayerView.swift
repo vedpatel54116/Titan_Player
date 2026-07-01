@@ -5,7 +5,8 @@ import AppKit
 struct PlayerView: View {
     @EnvironmentObject var session: PlaybackSession
     @State private var showControls = true
-    @State private var hideWorkItem: DispatchWorkItem?
+    @State private var hideTime: Date?
+    @State private var hideTimer: Timer?
     @State private var cursorHidden = false
 
     var body: some View {
@@ -24,7 +25,10 @@ struct PlayerView: View {
                     .onTapGesture { revealControls() }
             }
 
-            SubtitleOverlay(events: session.currentSubtitleEvents)
+            SubtitleOverlay(
+                events: session.currentSubtitleEvents,
+                hasMetalBitmap: session.currentSubtitleBitmap != nil
+            )
 
             VStack {
                 Spacer()
@@ -63,21 +67,27 @@ struct PlayerView: View {
 
     private func revealControls() {
         withAnimation { showControls = true }
-        hideWorkItem?.cancel()
+        hideTimer?.invalidate()
         if cursorHidden { unhideCursor() }
         if session.playState == .playing {
-            let work = DispatchWorkItem {
-                if session.playState == .playing {
-                    withAnimation { showControls = false }
-                }
+            hideTime = Date().addingTimeInterval(3)
+            hideTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [self] _ in
+                guard let hideTime, Date() >= hideTime, session.playState == .playing else { return }
+                withAnimation { showControls = false }
+                hideTimer?.invalidate()
+                hideTimer = nil
             }
-            hideWorkItem = work
-            DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
+        } else {
+            hideTime = nil
         }
     }
 
     private func startHideTimer() { revealControls() }
-    private func cancelHideTimer() { hideWorkItem?.cancel(); hideWorkItem = nil }
+    private func cancelHideTimer() {
+        hideTimer?.invalidate()
+        hideTimer = nil
+        hideTime = nil
+    }
 
     private func hideCursor() { cursorHidden = true; NSCursor.hide() }
     private func unhideCursor() { if cursorHidden { cursorHidden = false; NSCursor.unhide() } }
@@ -132,20 +142,25 @@ struct VideoContentView: View {
 
 struct SubtitleOverlay: View {
     let events: [SubtitleEvent]
+    let hasMetalBitmap: Bool
 
     var body: some View {
-        VStack {
-            Spacer()
-            ForEach(events, id: \.startTime) { event in
-                Text(event.text)
-                    .font(.system(size: event.style.fontSize))
-                    .foregroundColor(Color(
-                        red: event.style.foregroundColor.r,
-                        green: event.style.foregroundColor.g,
-                        blue: event.style.foregroundColor.b))
-                    .shadow(color: .black, radius: 2)
-                    .padding(.horizontal, 40)
-                    .padding(.bottom, 60)
+        if hasMetalBitmap {
+            EmptyView()
+        } else {
+            VStack {
+                Spacer()
+                ForEach(events, id: \.startTime) { event in
+                    Text(event.text)
+                        .font(.system(size: event.style.fontSize))
+                        .foregroundColor(Color(
+                            red: event.style.foregroundColor.r,
+                            green: event.style.foregroundColor.g,
+                            blue: event.style.foregroundColor.b))
+                        .shadow(color: .black, radius: 2)
+                        .padding(.horizontal, 40)
+                        .padding(.bottom, 60)
+                }
             }
         }
     }

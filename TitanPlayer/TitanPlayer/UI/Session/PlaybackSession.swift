@@ -14,6 +14,7 @@ final class PlaybackSession: ObservableObject {
     @Published var subtitles: [SubtitleTrack] = []
     @Published var activeSubtitle: SubtitleTrack?
     @Published var currentSubtitleEvents: [SubtitleEvent] = []
+    @Published var currentSubtitleBitmap: SubtitleBitmap?
     @Published var playbackRate: Float = 1.0
     @Published var audioDelay: TimeInterval = 0
     @Published var renderer: FrameRendering?
@@ -327,6 +328,9 @@ final class PlaybackSession: ObservableObject {
         subtitleManager.$currentEvents
             .receive(on: DispatchQueue.main)
             .assign(to: &$currentSubtitleEvents)
+        subtitleManager.$currentBitmap
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$currentSubtitleBitmap)
     }
 
     private func installDisplayBindings() {

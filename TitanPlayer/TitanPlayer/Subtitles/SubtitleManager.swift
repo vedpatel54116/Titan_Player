@@ -6,6 +6,7 @@ class SubtitleManager: ObservableObject {
     @Published var availableTracks: [SubtitleTrack] = []
     @Published var activeTrack: SubtitleTrack?
     @Published var currentEvents: [SubtitleEvent] = []
+    @Published var currentBitmap: SubtitleBitmap?
     
     private var parsers: [String: SubtitleParsing] = [
         "srt": SRTParser(),
@@ -14,9 +15,36 @@ class SubtitleManager: ObservableObject {
         "vtt": WebVTTParser()
     ]
     
+    private var subtitleRenderer: SubtitleRenderer?
+    
+    init() {
+        subtitleRenderer = LibAssRenderer()
+    }
+    
     func loadSubtitle(url: URL) throws {
         let data = try Data(contentsOf: url)
         let ext = url.pathExtension.lowercased()
+        
+        let isASS = ext == "ass" || ext == "ssa"
+        
+        if isASS {
+            guard let renderer = subtitleRenderer else {
+                throw MediaError(
+                    code: .unsupportedFormat,
+                    message: "Install libass for ASS subtitle support: brew install libass"
+                )
+            }
+            try renderer.load(data: data, encoding: .utf8)
+            let track = SubtitleTrack(
+                name: url.lastPathComponent,
+                language: nil,
+                isDefault: availableTracks.isEmpty,
+                events: []
+            )
+            availableTracks.append(track)
+            if activeTrack == nil { activeTrack = track }
+            return
+        }
         
         guard let parser = parsers[ext] else {
             throw MediaError(code: .unsupportedFormat, message: "Unsupported subtitle format: \(ext)")
@@ -41,20 +69,34 @@ class SubtitleManager: ObservableObject {
         activeTrack = track
     }
     
-    func update(for time: Double) {
+    func update(for time: Double, renderSize: CGSize = CGSize(width: 1920, height: 1080)) {
         guard let track = activeTrack else {
             currentEvents = []
+            currentBitmap = nil
             return
         }
         
-        currentEvents = track.events.filter { event in
-            time >= event.startTime && time <= event.endTime
+        let ext = (track.name as NSString).pathExtension.lowercased()
+        let isASS = ext == "ass" || ext == "ssa"
+        
+        if isASS {
+            currentEvents = []
+            if let renderer = subtitleRenderer {
+                currentBitmap = renderer.renderImage(forTime: time, size: renderSize)
+            }
+        } else {
+            currentBitmap = nil
+            currentEvents = track.events.filter { event in
+                time >= event.startTime && time <= event.endTime
+            }
         }
     }
     
     func clear() {
+        subtitleRenderer?.flush()
         availableTracks = []
         activeTrack = nil
         currentEvents = []
+        currentBitmap = nil
     }
 }

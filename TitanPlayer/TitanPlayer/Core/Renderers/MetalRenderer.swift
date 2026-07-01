@@ -30,6 +30,9 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     
     private var toneMappedTexture: MTLTexture?
     
+    private var subtitleTexture: MTLTexture?
+    private var subtitlePipelineState: MTLRenderPipelineState?
+    
     private let inFlightSemaphore = DispatchSemaphore(value: 3)
     private var frameIndex = 0
     
@@ -98,6 +101,13 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         pipelineDescriptor.colorAttachments[0].pixelFormat = .rgba16Float
         
         renderPipeline = try? device.makeRenderPipelineState(descriptor: pipelineDescriptor)
+        
+        let subtitleFunction = library.makeFunction(name: "subtitleFragment")
+        let subtitleDescriptor = MTLRenderPipelineDescriptor()
+        subtitleDescriptor.vertexFunction = library.makeFunction(name: "vertexShader")
+        subtitleDescriptor.fragmentFunction = subtitleFunction
+        subtitleDescriptor.colorAttachments[0].pixelFormat = .rgba16Float
+        subtitlePipelineState = try? device.makeRenderPipelineState(descriptor: subtitleDescriptor)
     }
     
     private func setupBuffers() {
@@ -159,6 +169,36 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         useDynamicMetadata = false
     }
     
+    func updateSubtitleBitmap(_ bitmap: SubtitleBitmap?) {
+        guard let bitmap = bitmap else {
+            subtitleTexture = nil
+            return
+        }
+
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: bitmap.pixelFormat,
+            width: bitmap.width,
+            height: bitmap.height,
+            mipmapped: false
+        )
+        descriptor.usage = [.shaderRead]
+        descriptor.storageMode = .managed
+
+        guard let texture = device.makeTexture(descriptor: descriptor) else { return }
+
+        texture.replace(
+            region: MTLRegion(
+                origin: MTLOrigin(x: 0, y: 0, z: 0),
+                size: MTLSize(width: bitmap.width, height: bitmap.height, depth: 1)
+            ),
+            mipmapLevel: 0,
+            withBytes: bitmap.pixels.baseAddress!,
+            bytesPerRow: bitmap.bytesPerRow
+        )
+
+        subtitleTexture = texture
+    }
+    
     func render(pixelBuffer: CVPixelBuffer, 
                 metadata: HDRMetadata?,
                 to drawable: CAMetalDrawable) {
@@ -209,6 +249,20 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
             renderEncoder.setFragmentBuffer(uniformsBuffer, offset: 0, index: 0)
             renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
             renderEncoder.endEncoding()
+        }
+        
+        if let subtitleTexture = subtitleTexture,
+           let subtitlePipelineState = subtitlePipelineState,
+           let outputTexture = toneMappedTexture {
+            let subtitleDescriptor = createRenderPassDescriptor(drawable: drawable)
+            if let subtitleEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: subtitleDescriptor) {
+                subtitleEncoder.setRenderPipelineState(subtitlePipelineState)
+                subtitleEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+                subtitleEncoder.setFragmentTexture(outputTexture, index: 0)
+                subtitleEncoder.setFragmentTexture(subtitleTexture, index: 1)
+                subtitleEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+                subtitleEncoder.endEncoding()
+            }
         }
         
         commandBuffer.present(drawable)
@@ -359,6 +413,20 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
 
             if let store = frameStore {
                 store.update(outputTexture)
+            }
+        }
+
+        if let subtitleTexture = subtitleTexture,
+           let subtitlePipelineState = subtitlePipelineState,
+           let outputTexture = toneMappedTexture {
+            let subtitleDescriptor = createRenderPassDescriptor(drawable: drawable)
+            if let subtitleEncoder = commandBuffer.makeRenderCommandEncoder(descriptor: subtitleDescriptor) {
+                subtitleEncoder.setRenderPipelineState(subtitlePipelineState)
+                subtitleEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+                subtitleEncoder.setFragmentTexture(outputTexture, index: 0)
+                subtitleEncoder.setFragmentTexture(subtitleTexture, index: 1)
+                subtitleEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+                subtitleEncoder.endEncoding()
             }
         }
 

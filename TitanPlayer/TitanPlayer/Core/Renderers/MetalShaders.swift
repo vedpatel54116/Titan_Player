@@ -4,7 +4,7 @@ import Metal
 /// Loads Metal shader libraries, preferring pre-compiled `.metallib` bundles
 /// and falling back to runtime MSL compilation from bundled `.metal` sources.
 enum MetalShaders {
-    static let sourceFileNames = ["Common", "Video", "HDR", "Analysis"]
+    static let sourceFileNames = ["Common", "Video", "HDR", "Analysis", "Subtitle"]
     static let resourceBundleName = "TitanPlayer_TitanPlayer.bundle"
 
     /// Returns a Metal library for the device. Tries in order:

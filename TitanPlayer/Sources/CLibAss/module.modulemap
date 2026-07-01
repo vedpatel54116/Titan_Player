@@ -1,0 +1,5 @@
+module CLibAss [system] {
+    header "/opt/homebrew/include/ass/ass.h"
+    link "ass"
+    export *
+}
