@@ -51,10 +51,8 @@ class AdaptiveDecoderManager: @unchecked Sendable {
     func configure(for track: VideoTrackInfo) async throws {
         currentTrack = track
 
-        // Query available decoders
         let availableDecoders = queryAvailableDecoders(for: track)
 
-        // Select optimal decoder (taking preference into account as a +5 tiebreak).
         preferenceLock.lock()
         let pref = self.preference
         preferenceLock.unlock()
@@ -66,10 +64,34 @@ class AdaptiveDecoderManager: @unchecked Sendable {
             preference: pref
         )
 
-        // Configure selected decoder
-        try await selection.decoder.configure(for: track)
-        await stateActor.setActiveDecoder(selection.decoder)
-        await stateActor.setState(.decoding(selection.decoder))
+        // Try the selected decoder
+        do {
+            try await selection.decoder.configure(for: track)
+            await stateActor.setActiveDecoder(selection.decoder)
+            await stateActor.setState(.decoding(selection.decoder))
+            let decoderName = String(describing: type(of: selection.decoder))
+            logger.info("Selected decoder: \(decoderName)")
+            return
+        } catch {
+            // If hardware failed, try software fallback
+            guard let fallback = getFallbackDecoder(for: selection.decoder) else {
+                throw PlaybackError.decodingFailed(error)
+            }
+
+            do {
+                try await fallback.configure(for: track)
+                await stateActor.setActiveDecoder(fallback)
+                await stateActor.setState(.decoding(fallback))
+                let fallbackName = String(describing: type(of: fallback))
+                logger.info("Fell back to: \(fallbackName)")
+                return
+            } catch {
+                // Both decoders failed
+                logger.error("Both decoders failed: \(error.localizedDescription)")
+                await stateActor.setState(.error(.softwareFailure))
+                throw PlaybackError.decodingFailed(error)
+            }
+        }
     }
     
     func decode(_ packet: MediaPacket) async throws -> DecoderOutput {
