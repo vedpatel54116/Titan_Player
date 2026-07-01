@@ -13,7 +13,7 @@ struct ContentView: View {
             PlayerView()
                 .frame(minWidth: 640, minHeight: 480)
         }
-        .frame(minWidth: 840, minHeight: 480)
+        .frame(minWidth: 800, minHeight: 450)
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleDrop(providers: providers)
         }

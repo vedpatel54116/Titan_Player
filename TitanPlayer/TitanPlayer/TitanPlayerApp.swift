@@ -6,7 +6,7 @@ struct TitanPlayerApp: App {
     @StateObject private var telemetry = TelemetryManager.shared
 
     var body: some Scene {
-        WindowGroup("TitanPlayer", id: "main") {
+        WindowGroup("Titan Player", id: "main") {
             ContentView()
                 .environmentObject(session)
                 .environmentObject(telemetry)
@@ -22,6 +22,7 @@ struct TitanPlayerApp: App {
                     SessionLocator.shared.attach(session)
                 }
         }
+        .defaultSize(width: 960, height: 540)
         .commands {
             TitanCommands(session: session)
             CommandGroup(replacing: .appSettings) {
