@@ -2,6 +2,7 @@ import Foundation
 import AVKit
 import AVFAudio
 import Combine
+import os
 
 @MainActor
 class PlaybackEngine: ObservableObject, SynchronizationProvider {
@@ -39,6 +40,8 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
 
     private let performanceMonitor: PerformanceMonitor
     private let performanceProbe: EnginePerformanceProbe
+    private let adaptiveDecoderManager = AdaptiveDecoderManager()
+    private let decoderLogger = Logger(subsystem: "com.titanplayer", category: "PlaybackEngine")
 
     var cpuUsage: Double { performanceProbe.cpuUsage }
     var memoryUsage: Int64 { performanceProbe.memoryUsage }
@@ -91,9 +94,13 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
 
                 self.player.replaceCurrentItem(with: item)
                 
-                await mediaPipeline?.openFile(url: url)
+                try await mediaPipeline?.openFile(url: url, adaptiveManager: adaptiveDecoderManager)
                 self.mediaInfo = mediaPipeline?.mediaInfo
-                
+
+                if let decoderName = await adaptiveDecoderManager.selectedDecoderName {
+                    decoderLogger.info("Selected decoder: \(decoderName) for \(url.lastPathComponent)")
+                }
+
                 self.state = .ready
             }
         } catch {
