@@ -133,8 +133,37 @@ class MediaPipeline: ObservableObject {
         }
     }
     
+    private func shouldDropFrame(_ framePTS: TimeInterval) -> Bool {
+        guard let provider = synchronizationProvider else { return false }
+        let audioTime = provider.audioCurrentTime
+        let drift = framePTS - audioTime
+        // Drop frame if it's behind audio clock beyond tolerance
+        return drift < -syncTolerance
+    }
+    
+    private func sleepIfAhead(framePTS: TimeInterval) {
+        guard let provider = synchronizationProvider else { return }
+        let audioTime = provider.audioCurrentTime
+        let drift = framePTS - audioTime
+        // Sleep if video is ahead of audio beyond tolerance
+        if drift > syncTolerance {
+            let sleepTime = min(drift - syncTolerance, 0.05) // Cap at 50ms
+            Thread.sleep(forTimeInterval: sleepTime)
+        }
+    }
+    
     private func processFrame(_ frame: MediaFrame) {
         if case let .video(videoFrame) = frame {
+            let framePTS = CMTimeGetSeconds(videoFrame.timestamp)
+            
+            // Synchronization check
+            if shouldDropFrame(framePTS) {
+                // Frame is behind audio clock, drop it
+                return
+            }
+            
+            sleepIfAhead(framePTS: framePTS)
+            
             timeObserver.update(to: videoFrame.timestamp)
             let currentRenderer = renderer
             Task { @MainActor in
