@@ -128,9 +128,8 @@ final class PlaybackSession: ObservableObject {
         alert.runModal()
     }
 
-    init(videoRenderer: VideoRenderer? = nil, audioRenderer: AudioRenderer? = nil) {
+    init(videoRenderer: VideoRenderer? = nil) {
         let resolvedVideoRenderer = videoRenderer ?? (try? MetalRenderer.make())
-        let resolvedAudioRenderer = audioRenderer ?? AVAudioEngineRenderer()
         self.renderer = resolvedVideoRenderer
         let engineVideoRenderer = resolvedVideoRenderer ?? NoOpFrameRenderer()
         if let metal = resolvedVideoRenderer as? MetalRenderer {
@@ -144,8 +143,7 @@ final class PlaybackSession: ObservableObject {
         self.analysis = VideoAnalysisManager(metalDevice: device)
         analysis.attach(frameStore: frameStore)
         self.engine = PlaybackEngine(
-            videoRenderer: engineVideoRenderer,
-            audioRenderer: resolvedAudioRenderer
+            videoRenderer: engineVideoRenderer
         )
         self.displayManager = DisplayManager()
         self.airPlayController = AirPlayController(monitor: engine.avPlayer)

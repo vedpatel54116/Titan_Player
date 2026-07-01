@@ -1,4 +1,5 @@
 import Foundation
+import CoreMedia
 import Combine
 
 class TimeObserver: ObservableObject {
@@ -21,6 +22,11 @@ class TimeObserver: ObservableObject {
         timer = nil
     }
     
+    func update(to timestamp: CMTime) {
+        currentTime = CMTimeGetSeconds(timestamp)
+        updateProgress()
+    }
+
     func seekTo(_ time: Double) {
         currentTime = time
         updateProgress()
