@@ -24,6 +24,10 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private var dynamicBrightnessAdjustment: Float = 0.0
     private var useDynamicMetadata: Bool = false
     
+    // HDR mode tracking for telemetry
+    private var hdrModeStartTime: Date?
+    private var lastReportedHDRMode: TelemetryHDRMode?
+    
     private var hdrUniformsBuffer: MTLBuffer?
     private var uniformsBuffer: MTLBuffer?
     private var vertexBuffer: MTLBuffer?
@@ -71,6 +75,20 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     }
 
     func detach() {
+        reportFinalHDRMode()
+    }
+    
+    private func reportFinalHDRMode() {
+        if let startTime = hdrModeStartTime, let lastMode = lastReportedHDRMode {
+            let duration = Date().timeIntervalSince(startTime)
+            if duration > 0.1 {
+                Task { @MainActor in
+                    TelemetryManager.shared.record(.hdrModeUsed(mode: lastMode, duration: duration))
+                }
+            }
+        }
+        hdrModeStartTime = nil
+        lastReportedHDRMode = nil
     }
 
     func updateDisplayCapabilitiesSynchronously(for screen: NSScreen) {
@@ -141,8 +159,31 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     }
     
     func updateHDRMode(_ mode: HDRMode) {
+        // Report previous HDR mode duration if we were tracking one
+        if let startTime = hdrModeStartTime, let lastMode = lastReportedHDRMode {
+            let duration = Date().timeIntervalSince(startTime)
+            if duration > 0.1 { // Only report if > 100ms
+                Task { @MainActor in
+                    TelemetryManager.shared.record(.hdrModeUsed(mode: lastMode, duration: duration))
+                }
+            }
+        }
+        
         currentHDRMode = mode
         delegate?.renderer(self, didDetectHDRMode: mode)
+        
+        // Start tracking new mode
+        switch mode {
+        case .sdr:
+            hdrModeStartTime = nil
+            lastReportedHDRMode = nil
+        case .hdr10:
+            hdrModeStartTime = Date()
+            lastReportedHDRMode = .hdr10
+        case .hlg:
+            hdrModeStartTime = Date()
+            lastReportedHDRMode = .hlghdr
+        }
     }
 
     func setResolutionCap(_ cap: ResolutionCap) {

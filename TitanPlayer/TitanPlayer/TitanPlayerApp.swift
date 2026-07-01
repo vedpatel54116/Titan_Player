@@ -27,7 +27,7 @@ struct TitanPlayerApp: App {
             CommandGroup(replacing: .appSettings) {
                 Button("Preferences...") {
                     NSApp.activate(ignoringOtherApps: true)
-                    if let window = NSApp.windows.first(where: { $0.identifier.rawValue == "preferences" }) {
+                    if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "preferences" }) {
                         window.makeKeyAndOrderFront(nil)
                     } else {
                         // Open preferences via menu action

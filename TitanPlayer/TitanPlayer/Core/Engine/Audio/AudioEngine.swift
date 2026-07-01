@@ -71,21 +71,23 @@ final class AudioEngine: ObservableObject {
     @Published var cpuUsage: Double = 0
 
     // MARK: - Private Properties
-    private let engine = AVAudioEngine()
-    private var playerNode: AVAudioPlayerNode?
-    private var environmentNode: AVAudioEnvironmentNode?
+    nonisolated(unsafe) private let engine = AVAudioEngine()
+    nonisolated(unsafe) private var playerNode: AVAudioPlayerNode?
+    nonisolated(unsafe) private var environmentNode: AVAudioEnvironmentNode?
     private let bufferPool = AudioBufferPool()
     private let coreAudioBridge: CoreAudioBridge
 
-    private var spatialConfig = SpatialAudioConfiguration()
-    private var hrtfData: [HRTFData] = []
+    nonisolated(unsafe) private var spatialConfig = SpatialAudioConfiguration()
+    nonisolated(unsafe) private var hrtfData: [HRTFData] = []
     private var audioSources: [UUID: AudioSourcePosition] = [:]
     private var cancellables = Set<AnyCancellable>()
 
     // Processing state
     private var processingQueue: DispatchQueue
+    private let audioQueue = DispatchQueue(label: "com.titanplayer.audio.graph", qos: .userInteractive)
     private var isProcessing: Bool = false
     private var startTime: TimeInterval = 0
+    nonisolated(unsafe) private var isReconfiguringSpatialAudio: Bool = false
 
     // Format tracking
     private var currentFormat: AVAudioFormat?
@@ -156,6 +158,8 @@ final class AudioEngine: ObservableObject {
     func startEngine() throws {
         guard !isRunning else { return }
 
+        // Prepare engine before starting to prevent glitches
+        engine.prepare()
         try engine.start()
         try coreAudioBridge.start()
         playerNode?.play()
@@ -190,9 +194,13 @@ final class AudioEngine: ObservableObject {
         // Copy input to processing buffer
         copyBuffer(from: buffer, to: processingBuffer)
 
-        // Apply spatial audio effects if enabled
-        if spatialAudioEnabled {
-            applySpatialAudio(to: processingBuffer)
+        // Apply spatial audio effects on the audio queue to avoid graph reconfiguration conflicts
+        let spatialEnabled = spatialAudioEnabled
+        if spatialEnabled {
+            audioQueue.sync { [weak self] in
+                guard let self = self else { return }
+                self.applySpatialAudio(to: processingBuffer)
+            }
         }
 
         // Apply volume scaling based on quality settings
@@ -312,26 +320,49 @@ final class AudioEngine: ObservableObject {
     func enableSpatialAudio() {
         guard !spatialAudioEnabled else { return }
 
+        // Set flag immediately for UI consistency
         spatialAudioEnabled = true
+        isReconfiguringSpatialAudio = true
 
-        // Configure head tracking if available
-        setupHeadTracking()
+        // Dispatch graph reconfiguration to dedicated audio queue
+        audioQueue.async { [weak self] in
+            guard let self = self else { return }
 
-        // Set up HRTF data
-        setupHRTF()
+            // Configure head tracking if available
+            self.setupHeadTracking()
 
-        // Configure reverb based on room characteristics
-        configureReverb()
+            // Set up HRTF data
+            self.setupHRTF()
 
-        audioLogger.info("Spatial audio enabled")
+            // Configure reverb based on room characteristics
+            self.configureReverb()
+
+            // Prepare engine to prevent glitches before any graph changes
+            self.engine.prepare()
+
+            self.isReconfiguringSpatialAudio = false
+            audioLogger.info("Spatial audio enabled")
+        }
     }
 
     func disableSpatialAudio() {
+        // Set flag immediately for UI consistency
         spatialAudioEnabled = false
-        audioLogger.info("Spatial audio disabled")
+        isReconfiguringSpatialAudio = true
+
+        // Dispatch graph reconfiguration to dedicated audio queue
+        audioQueue.async { [weak self] in
+            guard let self = self else { return }
+
+            // Prepare engine to prevent glitches before any graph changes
+            self.engine.prepare()
+
+            self.isReconfiguringSpatialAudio = false
+            audioLogger.info("Spatial audio disabled")
+        }
     }
 
-    private func setupHeadTracking() {
+    nonisolated private func setupHeadTracking() {
         // This would integrate with head tracking hardware or software
         // For now, we set up a basic orientation that can be updated
         spatialConfig.headPosition = SIMD3<Float>(0, 0, 0)
@@ -340,14 +371,14 @@ final class AudioEngine: ObservableObject {
         audioLogger.debug("Head tracking configured")
     }
 
-    private func setupHRTF() {
+    nonisolated private func setupHRTF() {
         // Load HRTF data from bundle or generate default
         // This is a simplified implementation
         hrtfData = loadDefaultHRTF()
         audioLogger.debug("HRTF data loaded: \(self.hrtfData.count) positions")
     }
 
-    private func loadDefaultHRTF() -> [HRTFData] {
+    nonisolated private func loadDefaultHRTF() -> [HRTFData] {
         // Generate simple default HRTF data
         // In production, this would load from a proper HRTF database
         var hrtf: [HRTFData] = []
@@ -368,7 +399,7 @@ final class AudioEngine: ObservableObject {
         return hrtf
     }
 
-    private func configureReverb() {
+    nonisolated private func configureReverb() {
         guard let environmentNode = environmentNode else { return }
 
         environmentNode.reverbParameters.enable = true
@@ -396,27 +427,68 @@ final class AudioEngine: ObservableObject {
         // Reconfigure audio graph for multi-channel
         try reconfigureAudioGraph(for: format)
 
+        // Determine audio format from channel count
+        let audioFormat: TelemetryAudioFormat
+        switch channelCount {
+        case 1, 2: audioFormat = .stereo
+        case 3...6: audioFormat = .surround5_1
+        case 7...12: audioFormat = .atmos
+        default: audioFormat = .stereo
+        }
+
+        TelemetryManager.shared.record(.audioFormatUsed(
+            format: audioFormat,
+            sampleRate: Int(format.sampleRate),
+            bitDepth: 32 // AVAudioFormat typically uses 32-bit float
+        ))
+
         audioLogger.info("Configured for \(channelCount)-channel audio")
     }
 
     private func reconfigureAudioGraph(for format: AVAudioFormat) throws {
-        engine.stop()
+        // Synchronize graph mutations on the dedicated audio queue
+        let semaphore = DispatchSemaphore(value: 0)
+        var graphError: Error?
 
-        // Disconnect existing nodes
-        if let playerNode = playerNode {
-            engine.disconnectNodeOutput(playerNode)
+        audioQueue.sync { [weak self] in
+            guard let self = self else {
+                semaphore.signal()
+                return
+            }
+
+            do {
+                self.engine.stop()
+
+                // Disconnect existing nodes
+                if let playerNode = self.playerNode {
+                    self.engine.disconnectNodeOutput(playerNode)
+                }
+                if let environmentNode = self.environmentNode {
+                    self.engine.disconnectNodeOutput(environmentNode)
+                }
+
+                // Reconnect with new format
+                self.engine.connect(self.playerNode!, to: self.environmentNode!, format: format)
+                self.engine.connect(self.environmentNode!, to: self.engine.mainMixerNode, format: format)
+
+                // Prepare engine before starting to prevent glitches
+                self.engine.prepare()
+
+                try self.engine.start()
+
+                audioLogger.debug("Audio graph reconfigured for format: \(format)")
+            } catch {
+                graphError = error
+            }
+
+            semaphore.signal()
         }
-        if let environmentNode = environmentNode {
-            engine.disconnectNodeOutput(environmentNode)
+
+        semaphore.wait()
+
+        if let error = graphError {
+            throw error
         }
-
-        // Reconnect with new format
-        engine.connect(playerNode!, to: environmentNode!, format: format)
-        engine.connect(environmentNode!, to: engine.mainMixerNode, format: format)
-
-        try engine.start()
-
-        audioLogger.debug("Audio graph reconfigured for format: \(format)")
     }
 
     // MARK: - Sample Rate Conversion
@@ -433,30 +505,36 @@ final class AudioEngine: ObservableObject {
 
         let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * targetSampleRate / sourceSampleRate))!
 
-        // High-quality resampling using vDSP
-        let ratio = targetSampleRate / sourceSampleRate
-        let inputFrameCount = Int(buffer.frameLength)
-        let outputFrameCount = Int(outputBuffer.frameCapacity)
+        // Perform format conversion on the audio queue to avoid conflicts with graph mutations
+        audioQueue.sync { [weak self] in
+            guard let _ = self else { return }
 
-        for channel in 0..<Int(buffer.format.channelCount) {
-            if let inputData = buffer.floatChannelData?[channel],
-               let outputData = outputBuffer.floatChannelData?[channel] {
-                // Simple linear interpolation for now
-                // In production, use higher quality resampling (e.g., SoX, Secret Rabbit Code)
-                for i in 0..<outputFrameCount {
-                    let sourceIndex = Double(i) / ratio
-                    let index1 = Int(sourceIndex)
-                    let index2 = min(index1 + 1, inputFrameCount - 1)
-                    let fraction = Float(sourceIndex - Double(index1))
+            // High-quality resampling using vDSP
+            let ratio = targetSampleRate / sourceSampleRate
+            let inputFrameCount = Int(buffer.frameLength)
+            let outputFrameCount = Int(outputBuffer.frameCapacity)
 
-                    let sample1 = inputData[index1]
-                    let sample2 = inputData[index2]
-                    outputData[i] = sample1 + (sample2 - sample1) * fraction
+            for channel in 0..<Int(buffer.format.channelCount) {
+                if let inputData = buffer.floatChannelData?[channel],
+                   let outputData = outputBuffer.floatChannelData?[channel] {
+                    // Simple linear interpolation for now
+                    // In production, use higher quality resampling (e.g., SoX, Secret Rabbit Code)
+                    for i in 0..<outputFrameCount {
+                        let sourceIndex = Double(i) / ratio
+                        let index1 = Int(sourceIndex)
+                        let index2 = min(index1 + 1, inputFrameCount - 1)
+                        let fraction = Float(sourceIndex - Double(index1))
+
+                        let sample1 = inputData[index1]
+                        let sample2 = inputData[index2]
+                        outputData[i] = sample1 + (sample2 - sample1) * fraction
+                    }
                 }
             }
+
+            outputBuffer.frameLength = AVAudioFrameCount(outputFrameCount)
         }
 
-        outputBuffer.frameLength = AVAudioFrameCount(outputFrameCount)
         return outputBuffer
     }
 

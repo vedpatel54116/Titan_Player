@@ -28,6 +28,9 @@ final class VideoAnalysisManager: ObservableObject {
                                          qos: .userInitiated)
     private var lastDispatchAt: Date = .distantPast
 
+    /// Tracks in-flight async analysis calls to avoid overlapping dispatches.
+    private var pendingAnalysisWork: Int = 0
+
     /// Source-pixel dimensions of the latest frame (nil before any frame arrives).
     var latestTextureSize: CGSize? {
         guard let t = frameStore?.latestTexture else { return nil }
@@ -53,6 +56,9 @@ final class VideoAnalysisManager: ObservableObject {
         if now.timeIntervalSince(lastDispatchAt) < (1.0 / 30.0) { return }
         lastDispatchAt = now
 
+        // Skip if analysis is already in-flight (prevents queue buildup).
+        guard pendingAnalysisWork == 0 else { return }
+
         var needed: AnalysisFlags = []
         if histogramEnabled   { needed.insert(.histogram) }
         if vectorscopeEnabled { needed.insert(.vectorscope) }
@@ -61,18 +67,38 @@ final class VideoAnalysisManager: ObservableObject {
         guard let tex = frameStore?.latestTexture else { return }
         guard runner.isReady(for: needed) else { return }
 
-        // Run on the GPU queue; capture only immutable value-types.
-        var hOut: HistogramData? = nil
-        var vOut: VectorscopeData? = nil
-        var wOut: WaveformData? = nil
-        if needed.contains(.histogram)   { hOut = runner.runHistogram(texture: tex) }
-        if needed.contains(.vectorscope) { vOut = runner.runVectorscope(texture: tex) }
-        if needed.contains(.waveform)    { wOut = runner.runWaveform(texture: tex) }
+        pendingAnalysisWork += 1
 
-        Task { @MainActor in
-            if let h = hOut { self.histogram = h }
-            if let v = vOut { self.vectorscope = v }
-            if let w = wOut { self.waveform = w }
+        // Use async GPU dispatch – each call enqueues work on the analysis
+        // command queue and returns immediately, keeping the render pipeline
+        // unblocked at 60 fps.
+        if needed.contains(.histogram) {
+            runner.runHistogramAsync(texture: tex) { [weak self] hOut in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let h = hOut { self.histogram = h }
+                }
+            }
+        }
+        if needed.contains(.vectorscope) {
+            runner.runVectorscopeAsync(texture: tex) { [weak self] vOut in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let v = vOut { self.vectorscope = v }
+                }
+            }
+        }
+        if needed.contains(.waveform) {
+            runner.runWaveformAsync(texture: tex) { [weak self] wOut in
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let w = wOut { self.waveform = w }
+                    self.pendingAnalysisWork -= 1
+                }
+            }
+        } else {
+            // No waveform – decrement count so we don't stall forever.
+            pendingAnalysisWork -= 1
         }
     }
 
@@ -81,8 +107,7 @@ final class VideoAnalysisManager: ObservableObject {
     func sampleColor(at col: Int, row: Int) async -> ColorSample? {
         guard let tex = frameStore?.latestTexture else { return nil }
         let v = await withCheckedContinuation { (cont: CheckedContinuation<SIMD4<Float>, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
-                let result = self.runner.samplePixel(texture: tex, col: col, row: row)
+            runner.samplePixelAsync(texture: tex, col: col, row: row) { result in
                 cont.resume(returning: result)
             }
         }

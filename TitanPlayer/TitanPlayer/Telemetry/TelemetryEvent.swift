@@ -9,7 +9,7 @@ enum TelemetryEvent {
     )
     
     case hdrModeUsed(
-        mode: HDRMode,
+        mode: TelemetryHDRMode,
         duration: TimeInterval
     )
     
@@ -21,7 +21,7 @@ enum TelemetryEvent {
     )
     
     case audioFormatUsed(
-        format: AudioFormat,
+        format: TelemetryAudioFormat,
         sampleRate: Int,
         bitDepth: Int
     )
@@ -33,13 +33,13 @@ enum PlaybackSource: String, Sendable {
     case dash
 }
 
-enum HDRMode: String, Sendable {
+enum TelemetryHDRMode: String, Sendable {
     case hdr10
     case dolbyVision
     case hlghdr
 }
 
-enum AudioFormat: String, Sendable {
+enum TelemetryAudioFormat: String, Sendable {
     case atmos
     case stereo
     case spatial

@@ -104,6 +104,15 @@ final class PerformanceOptimizer: ObservableObject {
 
         lastDerivedMode = mode
         lastActions = actions
+        
+        // Record performance snapshot for telemetry (every cycle)
+        let resolution = "\(Int(settings.resolution.width))x\(Int(settings.resolution.height))"
+        TelemetryManager.shared.record(.performanceSnapshot(
+            averageCPU: systemState.cpuUsage * 100,
+            averageGPU: 0, // GPU usage not directly available from system state
+            resolution: resolution,
+            codec: settings.decoderIsHW ? "hardware" : "software"
+        ))
     }
 
     static func makeDefault() -> PerformanceOptimizer {

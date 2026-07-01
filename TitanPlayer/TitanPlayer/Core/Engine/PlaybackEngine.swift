@@ -98,6 +98,12 @@ class PlaybackEngine: ObservableObject {
         } catch {
             self.state = .error(error.localizedDescription)
             self.lastError = (error as? PlaybackError) ?? .assetLoadFailed(error)
+            TelemetryManager.shared.record(.playbackFailed(
+                codec: "unknown",
+                resolution: "unknown",
+                errorCode: (error as? PlaybackError)?.errorDescription ?? error.localizedDescription,
+                source: url.pathExtension.lowercased() == "mpd" ? .dash : .local
+            ))
             throw error
         }
     }
@@ -216,7 +222,14 @@ class PlaybackEngine: ObservableObject {
             Task { @MainActor in
                 guard let self = self, self.player.currentItem === notification.object as? AVPlayerItem else { return }
                 self.state = .error("Playback failed")
-                self.lastError = .decodingFailed(NSError(domain: "PlaybackEngine", code: -1))
+                let error = notification.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? NSError
+                self.lastError = .decodingFailed(error ?? NSError(domain: "PlaybackEngine", code: -1))
+                TelemetryManager.shared.record(.playbackFailed(
+                    codec: "unknown",
+                    resolution: "unknown",
+                    errorCode: error?.localizedDescription ?? "Playback failed",
+                    source: .local
+                ))
             }
         }
         notificationObservers.append(failedObserver)
