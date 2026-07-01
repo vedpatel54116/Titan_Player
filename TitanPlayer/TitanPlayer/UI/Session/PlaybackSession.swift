@@ -176,8 +176,30 @@ final class PlaybackSession: ObservableObject {
     }
 
     func openFile(url: URL) async {
+        // Stop accessing previous resource if any
+        stopAccessingCurrentResource()
+
+        // Create and store bookmark for new URL
+        createBookmark(for: url)
+
+        // Resolve bookmark to get fresh URL
+        guard let resolvedURL = resolveBookmark(for: url.path) else {
+            showStaleBookmarkAlert(path: url.path)
+            return
+        }
+
+        // Start accessing security-scoped resource
+        guard startAccessingBookmark(for: resolvedURL) else {
+            playState = .error("Cannot access file at \(url.path). Check file permissions.")
+            return
+        }
+
+        // Track the accessed URL
+        currentlyAccessedURL = resolvedURL
+
+        // Load into engine
         do {
-            try await engine.load(url: url)
+            try await engine.load(url: resolvedURL)
             if url.pathExtension.lowercased() == "m3u8" {
                 streaming.load(url: url)
                 streaming.attach(player: engine.avPlayer)
@@ -198,6 +220,7 @@ final class PlaybackSession: ObservableObject {
             )
             performance.optimizeForCurrentState()
         } catch {
+            stopAccessingCurrentResource()
         }
     }
 
