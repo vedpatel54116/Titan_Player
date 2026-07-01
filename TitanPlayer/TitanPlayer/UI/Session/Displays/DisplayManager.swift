@@ -6,6 +6,7 @@ enum DisplayChangeEvent {
     case connected(ExternalDisplayConfig)
     case disconnected(stableID: String)
     case refreshed(ExternalDisplayConfig)
+    case primaryChanged(ExternalDisplayConfig)
 }
 
 protocol ScreenDetecting: AnyObject {
@@ -49,7 +50,12 @@ final class SystemScreenDetector: ScreenDetecting {
 final class DisplayManager: ObservableObject {
     @Published private(set) var displays: [ExternalDisplayConfig] = []
     @Published private(set) var activeDisplay: ExternalDisplayConfig?
+    @Published private(set) var primaryDisplay: ExternalDisplayConfig?
     let events = PassthroughSubject<DisplayChangeEvent, Never>()
+
+    var secondaryDisplay: ExternalDisplayConfig? {
+        displays.first(where: { $0.stableID != primaryDisplay?.stableID })
+    }
 
     private let provider: DisplayProviding
     private let detector: ScreenDetecting
@@ -66,6 +72,7 @@ final class DisplayManager: ObservableObject {
         self.detector = detector
         self.persistence = PersistedDisplayConfig(defaults: defaults)
         start()
+        restorePrimaryDisplay()
     }
 
     convenience init(defaults: UserDefaults = .standard) {
@@ -120,6 +127,16 @@ final class DisplayManager: ObservableObject {
             self.activeDisplay = updated
         }
 
+        // Re-validate primary display
+        if primaryDisplay == nil || !newIDs.contains(primaryDisplay?.stableID ?? "") {
+            if let promoted = configs.first(where: { $0.stableID != primaryDisplay?.stableID }) ?? configs.first {
+                primaryDisplay = promoted
+                persistence.savePrimaryDisplayID(promoted.stableID)
+            } else {
+                primaryDisplay = nil
+            }
+        }
+
         try? persistence.merge(newDisplays: configs)
     }
 
@@ -127,5 +144,21 @@ final class DisplayManager: ObservableObject {
         guard let next = displays.first(where: { $0.stableID == stableID }) else { return }
         activeDisplay = next
         events.send(.refreshed(next))
+    }
+
+    func setPrimaryDisplay(stableID: String) {
+        guard let next = displays.first(where: { $0.stableID == stableID }) else { return }
+        primaryDisplay = next
+        persistence.savePrimaryDisplayID(stableID)
+        events.send(.primaryChanged(next))
+    }
+
+    private func restorePrimaryDisplay() {
+        if let savedID = persistence.loadPrimaryDisplayID(),
+           let display = displays.first(where: { $0.stableID == savedID }) {
+            primaryDisplay = display
+        } else {
+            primaryDisplay = displays.first
+        }
     }
 }
