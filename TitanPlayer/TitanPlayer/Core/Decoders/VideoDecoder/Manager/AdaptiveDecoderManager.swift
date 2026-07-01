@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 // MARK: - Manager State
 
@@ -31,6 +32,8 @@ class AdaptiveDecoderManager: @unchecked Sendable {
 
     // Use actor for thread-safe state management
     private let stateActor = DecoderStateActor()
+
+    private let logger = Logger(subsystem: "com.titanplayer", category: "Decoder")
 
     init() {
         self.decoderSelector = DecoderSelector()
@@ -119,6 +122,12 @@ class AdaptiveDecoderManager: @unchecked Sendable {
     }
     
     var activeDecoderType: String? {
+        get async {
+            await stateActor.getActiveDecoder().map { String(describing: type(of: $0)) }
+        }
+    }
+
+    var selectedDecoderName: String? {
         get async {
             await stateActor.getActiveDecoder().map { String(describing: type(of: $0)) }
         }
