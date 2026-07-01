@@ -6,6 +6,9 @@ class TimeObserver: ObservableObject {
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
     @Published var progress: Double = 0
+    @Published var audioVideoDrift: TimeInterval = 0
+    private var driftLogStartTime: Date?
+    private let driftLogDuration: TimeInterval = 5.0
     
     private var timer: Timer?
     private var startTime: Date?
@@ -30,6 +33,21 @@ class TimeObserver: ObservableObject {
     func seekTo(_ time: Double) {
         currentTime = time
         updateProgress()
+    }
+    
+    func updateDrift(audioTime: TimeInterval, videoTime: TimeInterval) {
+        let drift = videoTime - audioTime
+        audioVideoDrift = drift
+        
+        // Log drift for first 5 seconds
+        if driftLogStartTime == nil {
+            driftLogStartTime = Date()
+        }
+        
+        let elapsed = Date().timeIntervalSince(driftLogStartTime!)
+        if elapsed <= driftLogDuration {
+            print("[Sync] Drift: \(String(format: "%.3f", drift * 1000))ms (audio: \(String(format: "%.3f", audioTime))s, video: \(String(format: "%.3f", videoTime))s)")
+        }
     }
     
     private func updateTime() {

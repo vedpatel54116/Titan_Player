@@ -164,6 +164,11 @@ class MediaPipeline: ObservableObject {
             
             sleepIfAhead(framePTS: framePTS)
             
+            if let provider = synchronizationProvider {
+                let audioTime = provider.audioCurrentTime
+                timeObserver.updateDrift(audioTime: audioTime, videoTime: framePTS)
+            }
+            
             timeObserver.update(to: videoFrame.timestamp)
             let currentRenderer = renderer
             Task { @MainActor in
