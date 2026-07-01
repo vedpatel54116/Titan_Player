@@ -12,9 +12,12 @@ class MediaPipeline: ObservableObject {
     private var decoder: MediaDecoding?
     private let timeObserver = TimeObserver()
     private let videoRenderer: VideoRenderer
+    weak var synchronizationProvider: SynchronizationProvider?
     var renderer: (any FrameRendering)? { videoRenderer }
 
     private let pipelineQueue = DispatchQueue(label: "com.titanplayer.pipeline", qos: .userInitiated)
+    private let syncTolerance: TimeInterval = 0.04  // 40ms tolerance
+    private let syncSleepInterval: TimeInterval = 0.001  // 1ms sleep when ahead
     private var packetTask: Task<Void, Never>?
     
     var currentTime: Double { timeObserver.currentTime }
