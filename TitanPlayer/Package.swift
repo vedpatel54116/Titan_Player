@@ -5,7 +5,8 @@ let package = Package(
     name: "TitanPlayer",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/superuser404notfound/FFmpegBuild", branch: "main")
+        .package(url: "https://github.com/superuser404notfound/FFmpegBuild", branch: "main"),
+        .package(url: "https://github.com/getsentry/sentry-cocoa", from: "8.0.0")
     ],
     targets: [
         .systemLibrary(
@@ -24,6 +25,7 @@ let package = Package(
                 .product(name: "Libavformat", package: "FFmpegBuild"),
                 .product(name: "Libavutil", package: "FFmpegBuild"),
                 .product(name: "Libswscale", package: "FFmpegBuild"),
+                .product(name: "Sentry", package: "sentry-cocoa"),
             ],
             path: "TitanPlayer",
             exclude: ["Info.plist"],
