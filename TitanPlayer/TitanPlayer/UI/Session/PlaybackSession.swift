@@ -27,6 +27,10 @@ final class PlaybackSession: ObservableObject {
     @Published var subtitlePosition: SubtitlePosition = .bottom
     @Published var subtitleBackgroundOpacity: Float = 0.6
 
+    @Published var currentlyAccessedURL: URL?
+
+    private let bookmarkDefaultsKey = "SecurityScopedBookmarks"
+
     @Published var fitMode: FitMode = .fit
     @Published var fitModeOverride: FitMode? = nil
 
@@ -43,6 +47,84 @@ final class PlaybackSession: ObservableObject {
     private let engine: PlaybackEngine
     private let subtitleManager = SubtitleManager()
     private var cancellables = Set<AnyCancellable>()
+
+    // MARK: - Security-Scoped Bookmark Management
+
+    private func createBookmark(for url: URL) {
+        do {
+            let bookmarkData = try url.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            var bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data] ?? [:]
+            bookmarks[url.path] = bookmarkData
+            UserDefaults.standard.set(bookmarks, forKey: bookmarkDefaultsKey)
+        } catch {
+            NSLog("[BookmarkManager] Failed to create bookmark for %@: %@", url.path, error.localizedDescription)
+        }
+    }
+
+    private func resolveBookmark(for path: String) -> URL? {
+        guard let bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data],
+              let bookmarkData = bookmarks[path] else {
+            return nil
+        }
+
+        var isStale = false
+        do {
+            let url = try URL(
+                resolvingBookmarkData: bookmarkData,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+
+            if isStale {
+                NSLog("[BookmarkManager] Stale bookmark detected for path: %@", path)
+                removeBookmark(for: path)
+                return nil
+            }
+
+            return url
+        } catch {
+            NSLog("[BookmarkManager] Failed to resolve bookmark for %@: %@", path, error.localizedDescription)
+            removeBookmark(for: path)
+            return nil
+        }
+    }
+
+    private func removeBookmark(for path: String) {
+        var bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data] ?? [:]
+        bookmarks.removeValue(forKey: path)
+        UserDefaults.standard.set(bookmarks, forKey: bookmarkDefaultsKey)
+        NSLog("[BookmarkManager] Removed stale bookmark for path: %@", path)
+    }
+
+    private func startAccessingBookmark(for url: URL) -> Bool {
+        let accessing = url.startAccessingSecurityScopedResource()
+        if !accessing {
+            NSLog("[BookmarkManager] Failed to start accessing security-scoped resource for: %@", url.path)
+        }
+        return accessing
+    }
+
+    private func stopAccessingCurrentResource() {
+        if let currentURL = currentlyAccessedURL {
+            currentURL.stopAccessingSecurityScopedResource()
+            NSLog("[BookmarkManager] Stopped accessing: %@", currentURL.path)
+            currentlyAccessedURL = nil
+        }
+    }
+
+    private func showStaleBookmarkAlert(path: String) {
+        let alert = NSAlert()
+        alert.messageText = "File Unavailable"
+        alert.informativeText = "The file at \"\(path)\" may have been moved or deleted. Please open the file again."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
 
     init(videoRenderer: VideoRenderer? = nil, audioRenderer: AudioRenderer? = nil) {
         let resolvedVideoRenderer = videoRenderer ?? (try? MetalRenderer.make())
