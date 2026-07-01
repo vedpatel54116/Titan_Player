@@ -26,7 +26,7 @@ enum MetalShaders {
 
     private static func loadPrecompiledMetallib(device: MTLDevice) -> MTLLibrary? {
         guard let url = locateMetallib(named: "default") else { return nil }
-        return try? device.makeLibrary(filepath: url.path)
+        return try? device.makeLibrary(URL: url)
     }
 
     private static func locateMetallib(named name: String) -> URL? {
