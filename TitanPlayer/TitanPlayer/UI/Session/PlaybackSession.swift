@@ -272,6 +272,7 @@ final class PlaybackSession: ObservableObject {
         engine.stop()
         subtitleManager.clear()
         performance.observe(settings: nil)
+        stopAccessingCurrentResource()
     }
 
     var lastErrorMessage: String? {
