@@ -134,7 +134,7 @@ struct VideoContentView: View {
             Image(systemName: "film")
                 .font(.system(size: 64))
                 .foregroundColor(.gray)
-            Text("Drop a video file here").foregroundColor(.gray)
+            Text("Drop a file here to play").foregroundColor(.gray)
             Text("or use File > Open").font(.caption).foregroundColor(.gray)
         }
     }
