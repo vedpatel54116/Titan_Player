@@ -39,19 +39,25 @@ class MediaPipeline: ObservableObject {
             // Standard container formats — skip FFmpeg probing entirely
             logger.info("Backend: AVFoundation (direct) for \(ext, privacy: .public)")
             let avDemuxer = AVFoundationDemuxer()
-            logger.info("Starting AVFoundation demuxing for: \(url.path, privacy: .public)")
-            let info = try await avDemuxer.open(url: url)
-            self.mediaInfo = info
-            timeObserver.duration = info.duration.seconds
-            demuxer = avDemuxer
-            decoder = AVFoundationDecoder()
-            if let videoTrack = info.videoTracks.first {
-                try decoder?.configure(for: videoTrack)
-                logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+            do {
+                logger.info("Starting AVFoundation demuxing for: \(url.path, privacy: .public)")
+                let info = try await avDemuxer.open(url: url)
+                self.mediaInfo = info
+                timeObserver.duration = info.duration.seconds
+                demuxer = avDemuxer
+                decoder = AVFoundationDecoder()
+                if let videoTrack = info.videoTracks.first {
+                    try decoder?.configure(for: videoTrack)
+                    logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+                }
+                playState = .paused
+                logger.info("AVFoundation (direct) demuxing completed, state set to paused")
+                return
+            } catch let error as MediaError {
+                let detailed = "\(error.message) — \(ext.uppercased()) file: \(url.lastPathComponent)"
+                logger.error("AVFoundation demuxing failed: \(detailed, privacy: .public)")
+                throw MediaError(code: error.code, message: detailed)
             }
-            playState = .paused
-            logger.info("AVFoundation (direct) demuxing completed, state set to paused")
-            return
         }
 
         if Self.shouldTryFFmpegFirst(for: ext) {
@@ -92,18 +98,25 @@ class MediaPipeline: ObservableObject {
         // Fallback: use AVFoundation
         logger.info("Backend: AVFoundation (fallback) for \(ext, privacy: .public)")
         let avDemuxer = AVFoundationDemuxer()
-        logger.info("Starting AVFoundation (fallback) demuxing for: \(url.path, privacy: .public)")
-        let info = try await avDemuxer.open(url: url)
-        self.mediaInfo = info
-        timeObserver.duration = info.duration.seconds
-        demuxer = avDemuxer
-        decoder = AVFoundationDecoder()
-        if let videoTrack = info.videoTracks.first {
-            try decoder?.configure(for: videoTrack)
-            logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+        do {
+            logger.info("Starting AVFoundation (fallback) demuxing for: \(url.path, privacy: .public)")
+            let info = try await avDemuxer.open(url: url)
+            self.mediaInfo = info
+            timeObserver.duration = info.duration.seconds
+            demuxer = avDemuxer
+            decoder = AVFoundationDecoder()
+            if let videoTrack = info.videoTracks.first {
+                try decoder?.configure(for: videoTrack)
+                logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+            }
+            playState = .paused
+            logger.info("AVFoundation (fallback) demuxing completed, state set to paused")
+            return
+        } catch let error as MediaError {
+            let detailed = "\(error.message) — \(ext.uppercased()) file: \(url.lastPathComponent)"
+            logger.error("AVFoundation (fallback) demuxing failed: \(detailed, privacy: .public)")
+            throw MediaError(code: error.code, message: detailed)
         }
-        playState = .paused
-        logger.info("AVFoundation (fallback) demuxing completed, state set to paused")
     }
     
     func openStream(session: DASHStreamSession) async {
