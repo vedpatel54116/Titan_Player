@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreMedia
+import AudioToolbox
 
 class AVFoundationDemuxer: MediaDemuxing {
     private var asset: AVURLAsset?
@@ -18,25 +19,70 @@ class AVFoundationDemuxer: MediaDemuxing {
         self.assetReader = reader
         
         let duration = try await asset.load(.duration)
+        
+        let avVideoTracks = try await asset.loadTracks(withMediaType: .video)
         var videoTracks: [VideoTrackInfo] = []
+        var foundVideoOutput: AVAssetReaderTrackOutput?
+        
+        for track in avVideoTracks {
+            let formatDescs = try? await track.load(.formatDescriptions)
+            let codecName = extractVideoCodecName(from: formatDescs)
+            let isHDR = detectHDR(from: formatDescs)
+            let nominalRate = try? await track.load(.nominalFrameRate)
+            let naturalSize = try? await track.load(.naturalSize)
+            
+            let trackInfo = VideoTrackInfo(
+                codec: codecName,
+                width: Int(naturalSize?.width ?? 0),
+                height: Int(naturalSize?.height ?? 0),
+                frameRate: Double(nominalRate ?? 0),
+                isHDR: isHDR,
+                extradata: nil
+            )
+            videoTracks.append(trackInfo)
+            
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+            if reader.canAdd(output) {
+                reader.add(output)
+                foundVideoOutput = output
+            }
+        }
+        
+        let avAudioTracks = try await asset.loadTracks(withMediaType: .audio)
         var audioTracks: [AudioTrackInfo] = []
+        var foundAudioOutput: AVAssetReaderTrackOutput?
         
-        // Simplified track loading - in production, use proper async APIs
-        videoTracks.append(VideoTrackInfo(
-            codec: "h264",
-            width: 1920,
-            height: 1080,
-            frameRate: 30.0,
-            isHDR: false,
-            extradata: nil
-        ))
+        for track in avAudioTracks {
+            let formatDescs = try? await track.load(.formatDescriptions)
+            let codecName = extractAudioCodecName(from: formatDescs)
+            let audioProps = extractAudioProperties(from: formatDescs)
+            let languageCode = try? await track.load(.languageCode)
+            
+            let trackInfo = AudioTrackInfo(
+                codec: codecName,
+                sampleRate: audioProps.sampleRate,
+                channels: audioProps.channels,
+                language: languageCode
+            )
+            audioTracks.append(trackInfo)
+            
+            let output = AVAssetReaderTrackOutput(track: track, outputSettings: nil)
+            if reader.canAdd(output) {
+                reader.add(output)
+                foundAudioOutput = output
+            }
+        }
         
-        audioTracks.append(AudioTrackInfo(
-            codec: "aac",
-            sampleRate: 44100,
-            channels: 2,
-            language: nil
-        ))
+        guard !videoTracks.isEmpty || !audioTracks.isEmpty else {
+            throw MediaError(
+                code: .unsupportedFormat,
+                message: "No playable tracks found — unsupported codec inside \(url.pathExtension.uppercased()) file"
+            )
+        }
+        
+        self.videoOutput = foundVideoOutput
+        self.audioOutput = foundAudioOutput
+        reader.startReading()
         
         return MediaInfo(
             duration: duration,
@@ -82,5 +128,53 @@ class AVFoundationDemuxer: MediaDemuxing {
     func close() {
         assetReader?.cancelReading()
         assetReader = nil
+    }
+    
+    // MARK: - Private Helpers
+    
+    private func extractVideoCodecName(from formatDescs: [CMFormatDescription]?) -> String {
+        guard let desc = formatDescs?.first else { return "unknown" }
+        let mediaSubType = CMFormatDescriptionGetMediaSubType(desc)
+        return fourCharCodeToString(mediaSubType)
+    }
+    
+    private func extractAudioCodecName(from formatDescs: [CMFormatDescription]?) -> String {
+        guard let desc = formatDescs?.first else { return "unknown" }
+        let mediaSubType = CMFormatDescriptionGetMediaSubType(desc)
+        return fourCharCodeToString(mediaSubType)
+    }
+    
+    private struct AudioProperties {
+        let sampleRate: Int
+        let channels: Int
+    }
+    
+    private func extractAudioProperties(from formatDescs: [CMFormatDescription]?) -> AudioProperties {
+        guard let desc = formatDescs?.first else {
+            return AudioProperties(sampleRate: 44100, channels: 2)
+        }
+        guard let asbd = CMAudioFormatDescriptionGetStreamBasicDescription(desc)?.pointee else {
+            return AudioProperties(sampleRate: 44100, channels: 2)
+        }
+        return AudioProperties(
+            sampleRate: Int(asbd.mSampleRate),
+            channels: Int(asbd.mChannelsPerFrame)
+        )
+    }
+    
+    private func detectHDR(from formatDescs: [CMFormatDescription]?) -> Bool {
+        guard let desc = formatDescs?.first else { return false }
+        guard let extensions = CMFormatDescriptionGetExtensions(desc) as? [String: Any] else { return false }
+        return extensions["ContainsHDRMetadata"] as? Bool ?? false
+    }
+    
+    private func fourCharCodeToString(_ code: OSType) -> String {
+        let bytes = [
+            UInt8(truncatingIfNeeded: code >> 24),
+            UInt8(truncatingIfNeeded: code >> 16),
+            UInt8(truncatingIfNeeded: code >> 8),
+            UInt8(truncatingIfNeeded: code)
+        ]
+        return String(bytes: bytes, encoding: .ascii) ?? "unknown"
     }
 }
