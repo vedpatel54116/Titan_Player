@@ -99,26 +99,47 @@ class AVFoundationDemuxer: MediaDemuxing {
         }
         
         if let output = videoOutput, let sampleBuffer = output.copyNextSampleBuffer() {
-            let timestamp = CMSampleBufferGetOutputPresentationTimeStamp(sampleBuffer)
-            let duration = CMSampleBufferGetOutputDuration(sampleBuffer)
-            
-            guard let dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
-                throw MediaError(code: .decodingFailed, message: "No data buffer")
-            }
-            
-            var length: Int = 0
-            let _ = CMBlockBufferGetDataPointer(dataBuffer, atOffset: 0, lengthAtOffsetOut: &length, totalLengthOut: nil, dataPointerOut: nil)
-            
-            return MediaPacket(
-                streamIndex: 0,
-                data: Data(),
-                timestamp: timestamp,
-                duration: duration,
-                isKeyFrame: true
-            )
+            return try buildPacket(from: sampleBuffer, streamIndex: 0)
+        }
+        
+        if let output = audioOutput, let sampleBuffer = output.copyNextSampleBuffer() {
+            return try buildPacket(from: sampleBuffer, streamIndex: 1)
         }
         
         throw MediaError(code: .decodingFailed, message: "No more packets")
+    }
+    
+    private func buildPacket(from sampleBuffer: CMSampleBuffer, streamIndex: Int) throws -> MediaPacket {
+        let timestamp = CMSampleBufferGetOutputPresentationTimeStamp(sampleBuffer)
+        let duration = CMSampleBufferGetOutputDuration(sampleBuffer)
+        
+        guard let dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
+            throw MediaError(code: .decodingFailed, message: "No data buffer")
+        }
+        
+        var length: Int = 0
+        var dataPointer: UnsafeMutablePointer<Int8>?
+        let status = CMBlockBufferGetDataPointer(
+            dataBuffer,
+            atOffset: 0,
+            lengthAtOffsetOut: &length,
+            totalLengthOut: nil,
+            dataPointerOut: &dataPointer
+        )
+        
+        guard status == noErr, let pointer = dataPointer else {
+            throw MediaError(code: .decodingFailed, message: "Failed to get data pointer")
+        }
+        
+        let data = Data(bytes: pointer, count: length)
+        
+        return MediaPacket(
+            streamIndex: streamIndex,
+            data: data,
+            timestamp: timestamp,
+            duration: duration,
+            isKeyFrame: true
+        )
     }
     
     func seek(to time: CMTime) async throws {
