@@ -21,6 +21,7 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     @Published var lastError: PlaybackError?
     @Published var spatialAudioEnabled: Bool = true
     @Published var mediaInfo: MediaInfo? = nil
+    @Published var compatibilityMode: Bool = false
 
     private let player = AVPlayer()
 
@@ -70,40 +71,67 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     func load(url: URL) async throws {
         state = .loading
         lastError = nil
+        self.compatibilityMode = false
+        decoderLogger.info("load(url:) called for: \(url.path, privacy: .public)")
 
         do {
             if url.pathExtension.lowercased() == "mpd" {
+                decoderLogger.info("DASH stream detected, creating DASHPlayer for: \(url.path, privacy: .public)")
                 let dashPlayer = DASHPlayerFactory.player(for: url)
                 let session = try await dashPlayer.streamSession(for: url)
+                decoderLogger.info("DASH stream session opened, opening stream in MediaPipeline")
                 await mediaPipeline?.openStream(session: session)
                 self.mediaInfo = mediaPipeline?.mediaInfo
+                decoderLogger.info("DASH stream loaded, state set to ready")
                 self.state = .ready
             } else {
+                decoderLogger.info("Creating AVURLAsset for: \(url.path, privacy: .public)")
                 let asset = AVURLAsset(url: url)
+                decoderLogger.info("AVURLAsset created, creating AVPlayerItem")
                 let item = AVPlayerItem(asset: asset)
 
+                decoderLogger.info("Loading video tracks...")
                 let videoTracks = try await asset.loadTracks(withMediaType: .video)
+                decoderLogger.info("Loaded \(videoTracks.count, privacy: .public) video track(s)")
+
+                decoderLogger.info("Loading audio tracks...")
                 let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+                decoderLogger.info("Loaded \(audioTracks.count, privacy: .public) audio track(s)")
 
                 guard !videoTracks.isEmpty || !audioTracks.isEmpty else {
+                    decoderLogger.error("No playable tracks found in: \(url.path, privacy: .public)")
                     throw PlaybackError.noPlayableTracks
                 }
 
+                decoderLogger.info("Loading asset duration...")
                 let durationValue = try await asset.load(.duration)
                 self.duration = CMTimeGetSeconds(durationValue)
+                decoderLogger.info("Duration loaded: \(self.duration, privacy: .public) seconds")
 
+                decoderLogger.info("Setting AVPlayerItem on AVPlayer...")
                 self.player.replaceCurrentItem(with: item)
-                
-                try await mediaPipeline?.openFile(url: url, adaptiveManager: adaptiveDecoderManager)
-                self.mediaInfo = mediaPipeline?.mediaInfo
+                decoderLogger.info("AVPlayerItem set successfully")
 
-                if let decoderName = await adaptiveDecoderManager.selectedDecoderName {
-                    decoderLogger.info("Selected decoder: \(decoderName) for \(url.lastPathComponent)")
+                decoderLogger.info("Opening file in MediaPipeline...")
+                do {
+                    try await mediaPipeline?.openFile(url: url, adaptiveManager: adaptiveDecoderManager)
+                    self.mediaInfo = mediaPipeline?.mediaInfo
+                    decoderLogger.info("MediaPipeline file opened successfully")
+                } catch {
+                    decoderLogger.warning("MediaPipeline failed (\(error.localizedDescription, privacy: .public)), falling back to AVPlayer compatibility mode")
+                    self.mediaInfo = nil
+                    self.compatibilityMode = true
                 }
 
+                if let decoderName = await adaptiveDecoderManager.selectedDecoderName {
+                    decoderLogger.info("Selected decoder: \(decoderName) for \(url.lastPathComponent, privacy: .public)")
+                }
+
+                decoderLogger.info("Setting state to ready")
                 self.state = .ready
             }
         } catch {
+            decoderLogger.error("Failed to load file: \(error.localizedDescription, privacy: .public)")
             self.state = .error(error.localizedDescription)
             self.lastError = (error as? PlaybackError) ?? .assetLoadFailed(error)
             TelemetryManager.shared.record(.playbackFailed(
