@@ -121,6 +121,10 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
                     decoderLogger.warning("MediaPipeline failed (\(error.localizedDescription, privacy: .public)), falling back to AVPlayer compatibility mode")
                     self.mediaInfo = nil
                     self.compatibilityMode = true
+                    TelemetryManager.shared.record(.compatibilityModeActivated(
+                        reason: error.localizedDescription,
+                        source: url.pathExtension.lowercased() == "mpd" ? .dash : .local
+                    ))
                 }
 
                 if let decoderName = await adaptiveDecoderManager.selectedDecoderName {

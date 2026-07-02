@@ -25,6 +25,11 @@ enum TelemetryEvent {
         sampleRate: Int,
         bitDepth: Int
     )
+
+    case compatibilityModeActivated(
+        reason: String,
+        source: PlaybackSource
+    )
 }
 
 enum PlaybackSource: String, Sendable {

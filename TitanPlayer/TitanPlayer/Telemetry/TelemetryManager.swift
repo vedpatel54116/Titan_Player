@@ -70,6 +70,14 @@ final class TelemetryManager: ObservableObject, TelemetryProviding {
                 "sample_rate": "\(sampleRate)",
                 "bit_depth": "\(bitDepth)"
             ]
+
+        case .compatibilityModeActivated(let reason, let source):
+            sentryEvent.message = SentryMessage(formatted: "compatibility_mode_activated")
+            sentryEvent.tags = [
+                "reason": reason,
+                "source": source.rawValue
+            ]
+            sentryEvent.level = .warning
         }
         
         SentrySDK.capture(event: sentryEvent)
