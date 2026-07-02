@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import CoreMedia
+import os
 
 @MainActor
 class MediaPipeline: ObservableObject {
@@ -19,6 +20,7 @@ class MediaPipeline: ObservableObject {
     private let syncTolerance: TimeInterval = 0.04  // 40ms tolerance
     private let syncSleepInterval: TimeInterval = 0.001  // 1ms sleep when ahead
     private var packetTask: Task<Void, Never>?
+    private let logger = Logger(subsystem: "com.titanplayer", category: "MediaPipeline")
     
     var currentTime: Double { timeObserver.currentTime }
     var duration: Double { timeObserver.duration }
@@ -30,35 +32,78 @@ class MediaPipeline: ObservableObject {
     
     func openFile(url: URL, adaptiveManager: AdaptiveDecoderManager? = nil) async throws {
         playState = .loading
+        let ext = url.pathExtension.lowercased()
+        logger.info("openFile called for: \(url.path, privacy: .public) (ext: \(ext, privacy: .public))")
 
-        let probeDemuxer = FFmpegDemuxer()
-        let info = try await probeDemuxer.open(url: url)
+        if Self.shouldUseAVFoundationDirectly(for: ext) {
+            // Standard container formats — skip FFmpeg probing entirely
+            logger.info("Backend: AVFoundation (direct) for \(ext, privacy: .public)")
+            let avDemuxer = AVFoundationDemuxer()
+            logger.info("Starting AVFoundation demuxing for: \(url.path, privacy: .public)")
+            let info = try await avDemuxer.open(url: url)
+            self.mediaInfo = info
+            timeObserver.duration = info.duration.seconds
+            demuxer = avDemuxer
+            decoder = AVFoundationDecoder()
+            if let videoTrack = info.videoTracks.first {
+                try decoder?.configure(for: videoTrack)
+                logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+            }
+            playState = .paused
+            logger.info("AVFoundation (direct) demuxing completed, state set to paused")
+            return
+        }
 
+        if Self.shouldTryFFmpegFirst(for: ext) {
+            // Containers where FFmpeg may have better demuxing — try FFmpeg, fall back to AVFoundation
+            logger.info("Backend: attempting FFmpeg for \(ext, privacy: .public)")
+            let probeDemuxer = FFmpegDemuxer()
+            do {
+                logger.info("Starting FFmpeg demuxing for: \(url.path, privacy: .public)")
+                let info = try await probeDemuxer.open(url: url)
+                self.mediaInfo = info
+                timeObserver.duration = info.duration.seconds
+                logger.info("FFmpeg demuxing successful, \(info.videoTracks.count, privacy: .public) video track(s), \(info.audioTracks.count, privacy: .public) audio track(s)")
+
+                if let videoTrack = info.videoTracks.first, let manager = adaptiveManager {
+                    try await manager.configure(for: videoTrack)
+                    demuxer = probeDemuxer
+                    decoder = VideoDecodingAdapter(decoder: manager.activeDecoder!)
+                    logger.info("Adaptive decoder configured for video track")
+                } else {
+                    demuxer = probeDemuxer
+                    decoder = FFmpegDecoder()
+                    logger.info("FFmpeg decoder configured")
+                }
+
+                if let videoTrack = info.videoTracks.first {
+                    try decoder?.configure(for: videoTrack)
+                    logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+                }
+                logger.info("Backend: FFmpeg succeeded for \(ext, privacy: .public)")
+                playState = .paused
+                return
+            } catch {
+                logger.warning("Backend: FFmpeg failed for \(ext, privacy: .public), falling back to AVFoundation — \(error.localizedDescription, privacy: .public)")
+                probeDemuxer.close()
+            }
+        }
+
+        // Fallback: use AVFoundation
+        logger.info("Backend: AVFoundation (fallback) for \(ext, privacy: .public)")
+        let avDemuxer = AVFoundationDemuxer()
+        logger.info("Starting AVFoundation (fallback) demuxing for: \(url.path, privacy: .public)")
+        let info = try await avDemuxer.open(url: url)
         self.mediaInfo = info
         timeObserver.duration = info.duration.seconds
-
-        if let videoTrack = info.videoTracks.first, let manager = adaptiveManager {
-            // Use AdaptiveDecoderManager for real decoding
-            // configure() handles hardware→software fallback internally
-            try await manager.configure(for: videoTrack)
-            demuxer = probeDemuxer
-            decoder = VideoDecodingAdapter(decoder: manager.activeDecoder!)
-        } else if shouldUseAVFoundation(for: info) {
-            probeDemuxer.close()
-            let avDemuxer = AVFoundationDemuxer()
-            decoder = AVFoundationDecoder()
-            _ = try await avDemuxer.open(url: url)
-            demuxer = avDemuxer
-        } else {
-            demuxer = probeDemuxer
-            decoder = FFmpegDecoder()
-        }
-
+        demuxer = avDemuxer
+        decoder = AVFoundationDecoder()
         if let videoTrack = info.videoTracks.first {
             try decoder?.configure(for: videoTrack)
+            logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
         }
-
         playState = .paused
+        logger.info("AVFoundation (fallback) demuxing completed, state set to paused")
     }
     
     func openStream(session: DASHStreamSession) async {
@@ -117,20 +162,28 @@ class MediaPipeline: ObservableObject {
     }
     
     private func startPacketReading() {
+        logger.info("Starting packet reading loop")
         packetTask = Task { [weak self] in
             guard let self = self else { return }
             
+            var frameCount = 0
             while !Task.isCancelled {
                 guard let packet = try? await self.demuxer?.nextPacket() else {
+                    self.logger.info("No more packets available, ending packet reading loop")
                     break
                 }
                 
                 if let frame = try? await self.decoder?.decode(packet) {
+                    frameCount += 1
+                    if frameCount == 1 {
+                        self.logger.info("First frame decoded successfully")
+                    }
                     await MainActor.run {
                         self.processFrame(frame)
                     }
                 }
             }
+            self.logger.info("Packet reading loop ended, total frames decoded: \(frameCount)")
         }
     }
     
@@ -191,8 +244,20 @@ class MediaPipeline: ObservableObject {
         self.videoRenderer = videoRenderer
     }
 
+    private static let avFoundationDirectExtensions: Set<String> = ["mp4", "mov", "m4v", "mkv"]
+    private static let ffmpegPreferredExtensions: Set<String> = ["flv"]
+
+    /// Standard container formats that AVFoundation handles reliably — bypass FFmpeg entirely.
+    static func shouldUseAVFoundationDirectly(for ext: String) -> Bool {
+        avFoundationDirectExtensions.contains(ext)
+    }
+
+    /// Containers where FFmpeg has better demuxing support — try FFmpeg first, fall back to AVFoundation.
+    static func shouldTryFFmpegFirst(for ext: String) -> Bool {
+        ffmpegPreferredExtensions.contains(ext)
+    }
+
     private func shouldUseAVFoundation(for info: MediaInfo) -> Bool {
-        // Determine if AVFoundation can handle this format
         let supportedCodecs = ["h264", "hevc", "prores", "aac", "alac"]
         return info.videoTracks.allSatisfy { supportedCodecs.contains($0.codec.lowercased()) }
     }
