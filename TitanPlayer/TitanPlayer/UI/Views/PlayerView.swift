@@ -5,21 +5,27 @@ import AppKit
 struct PlayerView: View {
     @EnvironmentObject var session: PlaybackSession
     @State private var showControls = true
-    @State private var hideTime: Date?
-    @State private var hideTimer: Timer?
+    @State private var hideWorkItem: DispatchWorkItem?
     @State private var cursorHidden = false
+    @State private var showingFileImporter = false
 
     var body: some View {
         ZStack {
             // Cmd-click overlay for the frame-accurate color picker.
             // Sits beneath subtitle/control layers so it captures view clicks
             // without interfering with subtitle hit-testing or the control bar.
-            ColorPickerOverlay(
-                manager: session.analysis,
-                viewSizeProvider: { .zero },  // unused; we resolve from GeometryReader
-                sourceSizeProvider: { session.analysis.latestTextureSize },
-                fitMode: session.effectiveFitMode
-            ) {
+            if let analysis = session.analysis {
+                ColorPickerOverlay(
+                    manager: analysis,
+                    viewSizeProvider: { .zero },  // unused; we resolve from GeometryReader
+                    sourceSizeProvider: { analysis.latestTextureSize },
+                    fitMode: session.effectiveFitMode
+                ) {
+                    VideoContentView()
+                        .aspectRatio(contentMode: session.effectiveFitMode == .fill ? .fill : .fit)
+                        .onTapGesture { revealControls() }
+                }
+            } else {
                 VideoContentView()
                     .aspectRatio(contentMode: session.effectiveFitMode == .fill ? .fill : .fit)
                     .onTapGesture { revealControls() }
@@ -47,12 +53,12 @@ struct PlayerView: View {
         .accessibilityIdentifier("playerView.root")
         .onAppear { revealControls() }
         .onHover { _ in revealControls() }
-        .onChange(of: showControls) { visible in
+        .onChange(of: showControls) { _, visible in
             if visible { unhideCursor() } else if session.playState == .playing { hideCursor() }
         }
-        .onChange(of: session.playState) { newstate in
+        .onChange(of: session.playState) { _, newstate in
             if newstate == .playing {
-                startHideTimer()
+                revealControls()
             } else {
                 cancelHideTimer()
                 withAnimation { showControls = true }
@@ -63,30 +69,40 @@ struct PlayerView: View {
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleDrop(providers: providers)
         }
-    }
-
-    private func revealControls() {
-        withAnimation { showControls = true }
-        hideTimer?.invalidate()
-        if cursorHidden { unhideCursor() }
-        if session.playState == .playing {
-            hideTime = Date().addingTimeInterval(3)
-            hideTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [self] _ in
-                guard let hideTime, Date() >= hideTime, session.playState == .playing else { return }
-                withAnimation { showControls = false }
-                hideTimer?.invalidate()
-                hideTimer = nil
-            }
-        } else {
-            hideTime = nil
+        .fileImporter(
+            isPresented: $showingFileImporter,
+            allowedContentTypes: [
+                .movie, .video, .mpeg4Movie, .quickTimeMovie,
+                .avi, .mpeg2Video,
+                .audio, .mp3, .wav, .aiff,
+                UTType(filenameExtension: "m3u8") ?? .data,
+                UTType(filenameExtension: "mkv") ?? .data,
+                UTType(filenameExtension: "webm") ?? .data,
+                UTType(filenameExtension: "flac") ?? .data,
+            ],
+            allowsMultipleSelection: false
+        ) { result in
+            handleFileImporterResult(result)
         }
     }
 
-    private func startHideTimer() { revealControls() }
+    private func revealControls() {
+        hideWorkItem?.cancel()
+        withAnimation { showControls = true }
+        if cursorHidden { unhideCursor() }
+        guard session.playState == .playing else { return }
+        let work = DispatchWorkItem { [self] in
+            guard session.playState == .playing else { return }
+            withAnimation { showControls = false }
+            hideCursor()
+        }
+        hideWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
+    }
+
     private func cancelHideTimer() {
-        hideTimer?.invalidate()
-        hideTimer = nil
-        hideTime = nil
+        hideWorkItem?.cancel()
+        hideWorkItem = nil
     }
 
     private func hideCursor() { cursorHidden = true; NSCursor.hide() }
@@ -97,14 +113,27 @@ struct PlayerView: View {
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             guard let data = item as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
+            NSLog("[PlayerView] File dropped: %@", url.path)
             Task { @MainActor in await session.openFile(url: url) }
         }
         return true
+    }
+
+    private func handleFileImporterResult(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            NSLog("[PlayerView] File selected via picker: %@", url.path)
+            Task { @MainActor in await session.openFile(url: url) }
+        case .failure(let error):
+            NSLog("[PlayerView] File picker error: %@", error.localizedDescription)
+        }
     }
 }
 
 struct VideoContentView: View {
     @EnvironmentObject var session: PlaybackSession
+    @State private var showingFileImporter = false
 
     var body: some View {
         ZStack {
@@ -117,6 +146,8 @@ struct VideoContentView: View {
             case .ready, .playing, .paused, .seeking, .ended:
                 if session.isAudioOnly {
                     AudioOnlyView()
+                } else if session.isCompatibilityMode {
+                    AVPlayerViewWrapper(player: session.avPlayer)
                 } else if let renderer = session.renderer as? MetalRenderer {
                     MetalMtkView(renderer: renderer)
                 } else {
@@ -125,6 +156,28 @@ struct VideoContentView: View {
             case .error:
                 Text(session.lastErrorMessage ?? "Playback error")
                     .foregroundColor(.red)
+            }
+        }
+        .fileImporter(
+            isPresented: $showingFileImporter,
+            allowedContentTypes: [
+                .movie, .video, .mpeg4Movie, .quickTimeMovie,
+                .avi, .mpeg2Video,
+                .audio, .mp3, .wav, .aiff,
+                UTType(filenameExtension: "m3u8") ?? .data,
+                UTType(filenameExtension: "mkv") ?? .data,
+                UTType(filenameExtension: "webm") ?? .data,
+                UTType(filenameExtension: "flac") ?? .data,
+            ],
+            allowsMultipleSelection: false
+        ) { result in
+            switch result {
+            case .success(let urls):
+                guard let url = urls.first else { return }
+                NSLog("[VideoContentView] File selected: %@", url.path)
+                Task { @MainActor in await session.openFile(url: url) }
+            case .failure(let error):
+                NSLog("[VideoContentView] File picker error: %@", error.localizedDescription)
             }
         }
     }
@@ -136,6 +189,12 @@ struct VideoContentView: View {
                 .foregroundColor(.gray)
             Text("Drop a file here to play").foregroundColor(.gray)
             Text("or use File > Open").font(.caption).foregroundColor(.gray)
+            Button("Open File…") {
+                showingFileImporter = true
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .padding(.top, 8)
         }
     }
 }
