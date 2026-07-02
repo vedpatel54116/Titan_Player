@@ -36,6 +36,24 @@ struct PlayerView: View {
                 hasMetalBitmap: session.currentSubtitleBitmap != nil
             )
 
+            if session.isCompatibilityMode {
+                VStack {
+                    HStack {
+                        Text("Compatibility Mode")
+                            .font(.caption)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.ultraThinMaterial)
+                            .cornerRadius(6)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                    }
+                    Spacer()
+                }
+                .padding(12)
+                .allowsHitTesting(false)
+            }
+
             VStack {
                 Spacer()
                 if showControls {
