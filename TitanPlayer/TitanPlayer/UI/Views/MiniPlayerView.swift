@@ -11,6 +11,9 @@ struct MiniPlayerView: View {
 
             if session.isAudioOnly {
                 AudioOnlyView(compact: true)
+            } else if session.isCompatibilityMode {
+                AVPlayerViewWrapper(player: session.avPlayer)
+                    .aspectRatio(contentMode: session.effectiveFitMode == .fill ? .fill : .fit)
             } else if session.isMediaLoaded {
                 MirrorMTKView(frameStore: session.frameStore)
                     .aspectRatio(contentMode: session.effectiveFitMode == .fill ? .fill : .fit)
@@ -43,7 +46,7 @@ struct MiniPlayerView: View {
             window.styleMask.insert(.borderless)
         }
         .onAppear { startHideTimer() }
-        .onChange(of: session.playState) { newstate in
+        .onChange(of: session.playState) { _, newstate in
             if newstate == .playing {
                 startHideTimer()
             } else {
