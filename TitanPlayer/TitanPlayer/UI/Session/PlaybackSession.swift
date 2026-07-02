@@ -1,10 +1,13 @@
 import SwiftUI
 import Combine
+import AVKit
 import AVFAudio
 import AppKit
+import os
 
 @MainActor
 final class PlaybackSession: ObservableObject {
+    private let logger = Logger(subsystem: "com.titanplayer.app", category: "FileOpen")
     @Published var playState: PlaybackState = .idle
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
@@ -21,6 +24,7 @@ final class PlaybackSession: ObservableObject {
 
     @Published var isAudioOnly: Bool = false
     @Published var isHDRContent: Bool = false
+    @Published var isCompatibilityMode: Bool = false
     @Published var toneMappingEnabled: Bool = true
     @Published var brightness: Float = 1.0
 
@@ -30,6 +34,8 @@ final class PlaybackSession: ObservableObject {
 
     @Published var currentlyAccessedURL: URL?
     @Published var fileOpenError: String?
+    @Published var errorMessage: String?
+    @Published var initializationError: String?
 
     private let bookmarkDefaultsKey = "SecurityScopedBookmarks"
 
@@ -38,7 +44,7 @@ final class PlaybackSession: ObservableObject {
 
     let frameStore = FrameStore()
     let shortcutManager = KeyboardShortcutManager()
-    var analysis: VideoAnalysisManager
+    var analysis: VideoAnalysisManager?
     let displayManager: DisplayManager
     let airPlayController: AirPlayController
     let streaming: StreamingManager
@@ -48,6 +54,7 @@ final class PlaybackSession: ObservableObject {
     private var secondaryDisplayWindow: ExternalDisplayWindow?
 
     private let engine: PlaybackEngine
+    var avPlayer: AVPlayer { engine.avPlayer }
     private let subtitleManager = SubtitleManager()
     private var cancellables = Set<AnyCancellable>()
 
@@ -104,14 +111,6 @@ final class PlaybackSession: ObservableObject {
         NSLog("[BookmarkManager] Removed stale bookmark for path: %@", path)
     }
 
-    private func startAccessingBookmark(for url: URL) -> Bool {
-        let accessing = url.startAccessingSecurityScopedResource()
-        if !accessing {
-            NSLog("[BookmarkManager] Failed to start accessing security-scoped resource for: %@", url.path)
-        }
-        return accessing
-    }
-
     func stopAccessingCurrentResource() {
         if let currentURL = currentlyAccessedURL {
             currentURL.stopAccessingSecurityScopedResource()
@@ -124,8 +123,68 @@ final class PlaybackSession: ObservableObject {
         fileOpenError = "Could not open \"\(path)\". \(reason)"
     }
 
+    private static func describe(error: Error, for url: URL) -> String {
+        let name = url.lastPathComponent
+        if let playbackError = error as? PlaybackError {
+            switch playbackError {
+            case .invalidURL:
+                return "Failed to open \"\(name)\": The file URL is invalid."
+            case .noPlayableTracks:
+                return "Failed to open \"\(name)\": The file contains no playable video or audio tracks. The codec may be unsupported."
+            case .assetLoadFailed(let underlying):
+                return "Failed to open \"\(name)\": \(underlying.localizedDescription)"
+            case .decodingFailed(let underlying):
+                return "Failed to open \"\(name)\": Decoding failed — \(underlying.localizedDescription)"
+            case .audioOutputFailed(let underlying):
+                return "Failed to open \"\(name)\": Audio output failed — \(underlying.localizedDescription)"
+            case .rateNotSupported:
+                return "Failed to open \"\(name)\": The playback rate is not supported by this file."
+            case .seekFailed:
+                return "Failed to open \"\(name)\": Seeking within the file failed."
+            }
+        }
+        if let decoderError = error as? DecoderError {
+            switch decoderError {
+            case .unsupportedCodec(let codec):
+                return "Failed to open \"\(name)\": Unsupported codec \"\(codec)\". No decoder is available for this format."
+            case .sessionNotConfigured:
+                return "Failed to open \"\(name)\": The decoder session was not properly configured."
+            case .bufferCreationFailed(let status):
+                return "Failed to open \"\(name)\": Could not allocate a decoding buffer (OSStatus \(status))."
+            case .noFramesDecoded:
+                return "Failed to open \"\(name)\": The decoder could not decode any frames from this file."
+            case .hardwareFailure:
+                return "Failed to open \"\(name)\": Hardware decoder failure. The device may not support this codec."
+            case .softwareFailure:
+                return "Failed to open \"\(name)\": Software decoder failure."
+            }
+        }
+        if let nsError = error as NSError? {
+            let domain = nsError.domain
+            let code = nsError.code
+            if domain == "NSOSStatusErrorDomain" && code == -2004 { // 'fmt?' — file format not recognized
+                return "Failed to open \"\(name)\": File format not recognized. The container may be corrupted or unsupported."
+            }
+            if domain == "AVFoundationErrorDomain" {
+                switch code {
+                case -11800:
+                    return "Failed to open \"\(name)\": AVFoundation could not open the file. The format may be unsupported or the file may be corrupted."
+                case -11821:
+                    return "Failed to open \"\(name)\": Decoding failed. The video codec in this file is not supported."
+                default:
+                    break
+                }
+            }
+        }
+        return "Failed to open \"\(name)\": \(error.localizedDescription)"
+    }
+
     func dismissFileOpenError() {
         fileOpenError = nil
+    }
+
+    func dismissErrorMessage() {
+        errorMessage = nil
     }
 
     init(videoRenderer: VideoRenderer? = nil) {
@@ -138,10 +197,10 @@ final class PlaybackSession: ObservableObject {
         // Video analysis: own a VideoAnalysisManager that subscribes to the
         // session's frame store. Initialize early so `self` is fully available
         // before we register it as the renderer's delegate below.
-        let device = MTLCreateSystemDefaultDevice()
-            ?? MTLCreateSystemDefaultDevice()!
-        self.analysis = VideoAnalysisManager(metalDevice: device)
-        analysis.attach(frameStore: frameStore)
+        if let device = MTLCreateSystemDefaultDevice() {
+            self.analysis = VideoAnalysisManager(metalDevice: device)
+            analysis?.attach(frameStore: frameStore)
+        }
         self.engine = PlaybackEngine(
             videoRenderer: engineVideoRenderer
         )
@@ -151,6 +210,9 @@ final class PlaybackSession: ObservableObject {
         self.performance = PerformanceOptimizer.makeDefault()
         if let metal = resolvedVideoRenderer as? MetalRenderer {
             metal.delegate = self
+        }
+        if MTLCreateSystemDefaultDevice() == nil && videoRenderer == nil {
+            self.initializationError = "Metal GPU is not available. Video rendering will be unavailable."
         }
         installAudioTap()
         setupBindings()
@@ -163,6 +225,9 @@ final class PlaybackSession: ObservableObject {
             name: NSApplication.willTerminateNotification,
             object: nil
         )
+        Task.detached(priority: .background) { [performance] in
+            performance.startPerformanceMonitor()
+        }
     }
 
     var isMediaLoaded: Bool {
@@ -182,31 +247,43 @@ final class PlaybackSession: ObservableObject {
     }
 
     func openFile(url: URL) async {
+        logger.info("openFile called with URL: \(url.path, privacy: .public)")
+
         // Stop accessing previous resource if any
         stopAccessingCurrentResource()
 
         // Create and store bookmark for new URL
         createBookmark(for: url)
 
-        // Resolve bookmark to get fresh URL
-        guard let resolvedURL = resolveBookmark(for: url.path) else {
-            showFileAccessError(path: url.path, reason: "The file may have been moved or deleted. Please open the file again.")
-            return
+        // Resolve bookmark to get fresh URL, with fallback to original URL
+        var accessURL = url
+        if let resolvedURL = resolveBookmark(for: url.path) {
+            logger.info("Bookmark resolved successfully for: \(resolvedURL.path, privacy: .public)")
+            accessURL = resolvedURL
+        } else {
+            logger.warning("Failed to resolve bookmark for: \(url.path, privacy: .public), falling back to original URL")
         }
 
         // Start accessing security-scoped resource
-        guard startAccessingBookmark(for: resolvedURL) else {
-            playState = .error("Cannot access file at \(url.path). Check file permissions.")
-            showFileAccessError(path: url.path, reason: "The file could not be accessed. Check that the file exists and you have permission to read it.")
-            return
+        // For files dragged from Finder or on external volumes, the URL may not be
+        // security-scoped, so startAccessingSecurityScopedResource() may return false.
+        // We log the failure but still attempt to access the file.
+        let accessing = accessURL.startAccessingSecurityScopedResource()
+        if !accessing {
+            logger.warning("startAccessingSecurityScopedResource() returned false for: \(accessURL.path, privacy: .public). Proceeding with file access attempt.")
+        } else {
+            logger.info("Security-scoped access started successfully for: \(accessURL.path, privacy: .public)")
         }
 
-        // Track the accessed URL
-        currentlyAccessedURL = resolvedURL
+        // Track the accessed URL for cleanup when playback stops or app closes
+        currentlyAccessedURL = accessURL
 
         // Load into engine
         do {
-            try await engine.load(url: resolvedURL)
+            logger.info("Loading file into engine: \(accessURL.path, privacy: .public)")
+            try await engine.load(url: accessURL)
+            logger.info("File loaded successfully into engine: \(accessURL.path, privacy: .public)")
+            errorMessage = nil
             if url.pathExtension.lowercased() == "m3u8" {
                 streaming.load(url: url)
                 streaming.attach(player: engine.avPlayer)
@@ -227,8 +304,11 @@ final class PlaybackSession: ObservableObject {
             )
             performance.optimizeForCurrentState()
         } catch {
+            logger.error("Failed to load file into engine: \(error.localizedDescription, privacy: .public)")
             stopAccessingCurrentResource()
+            let message = Self.describe(error: error, for: url)
             showFileAccessError(path: url.path, reason: error.localizedDescription)
+            errorMessage = message
         }
     }
 
@@ -322,6 +402,9 @@ final class PlaybackSession: ObservableObject {
         engine.$audioDelay
             .receive(on: DispatchQueue.main)
             .assign(to: &$audioDelay)
+        engine.$compatibilityMode
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$isCompatibilityMode)
         subtitleManager.$availableTracks
             .receive(on: DispatchQueue.main)
             .assign(to: &$subtitles)
@@ -381,7 +464,7 @@ final class PlaybackSession: ObservableObject {
         let caps = detector.detectCapabilities(for: screen)
         let icc = detector.detectICCProfile(for: screen)
 
-        let device = MTLCreateSystemDefaultDevice()!
+        guard let device = MTLCreateSystemDefaultDevice() else { return }
         let window = ExternalDisplayWindow(device: device)
         window.show(on: screen)
         secondaryDisplayWindow = window
@@ -422,7 +505,7 @@ final class PlaybackSession: ObservableObject {
             let caps = detector.detectCapabilities(for: screen)
             let icc = detector.detectICCProfile(for: screen)
 
-            let device = MTLCreateSystemDefaultDevice()!
+            guard let device = MTLCreateSystemDefaultDevice() else { return }
             let window = ExternalDisplayWindow(device: device)
             window.show(on: screen)
             secondaryDisplayWindow = window
@@ -441,7 +524,7 @@ final class PlaybackSession: ObservableObject {
     /// decoded PCM frames to both the loudness meter and the spatial
     /// audio engine.
     private func installAudioTap() {
-        let meter = analysis.audioMeter
+        guard let meter = analysis?.audioMeter else { return }
         engine.audioTap = { [weak self] frame in
             Task { @MainActor in
                 meter.consume(frame: frame)
@@ -494,7 +577,7 @@ final class PlaybackSession: ObservableObject {
         keyMonitorToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
             guard let window = event.window else { return event }
-            let identifier = window.identifier?.rawValue ?? window.title ?? ""
+            let identifier = window.identifier?.rawValue ?? window.title
             let belongsToScene =
                 identifier.contains("main")   ||
                 identifier.contains("mini")   ||
