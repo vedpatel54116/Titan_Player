@@ -45,7 +45,8 @@ let package = Package(
             dependencies: ["TitanPlayer"],
             path: "Tests",
             resources: [
-                .copy("Fixtures/test.mp4")
+                .copy("Fixtures/test.mp4"),
+                .copy("Fixtures/test.mkv")
             ]
         )
     ]
