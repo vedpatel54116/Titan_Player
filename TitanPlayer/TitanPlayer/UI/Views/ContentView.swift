@@ -1,10 +1,12 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import os
 
 struct ContentView: View {
     @EnvironmentObject private var session: PlaybackSession
     @StateObject private var libraryViewModel = LibraryViewModel()
     @State private var showingFileImporter = false
+    private let logger = Logger(subsystem: "com.titanplayer.app", category: "PlayerView")
 
     private let supportedContentTypes: [UTType] = [
         .movie, .video, .mpeg4Movie, .quickTimeMovie,
@@ -58,7 +60,7 @@ struct ContentView: View {
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             guard let data = item as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-            NSLog("[ContentView] File dropped: %@", url.path)
+            logger.info("File dropped: \(url.path, privacy: .public)")
             Task { @MainActor in await session.openFile(url: url) }
         }
         return true
@@ -68,10 +70,10 @@ struct ContentView: View {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            NSLog("[ContentView] File selected via picker: %@", url.path)
+            logger.info("File selected via picker: \(url.path, privacy: .public)")
             Task { @MainActor in await session.openFile(url: url) }
         case .failure(let error):
-            NSLog("[ContentView] File picker error: %@", error.localizedDescription)
+            logger.error("File picker error: \(error.localizedDescription, privacy: .public)")
         }
     }
 }

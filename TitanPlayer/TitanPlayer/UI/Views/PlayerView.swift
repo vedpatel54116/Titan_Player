@@ -11,6 +11,7 @@ struct PlayerView: View {
     @State private var cursorHidden = false
     @State private var showingFileImporter = false
     @State private var lastInteraction = Date.distantFuture
+    @State private var autoHideTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -85,6 +86,7 @@ struct PlayerView: View {
             if newstate == .playing {
                 revealControls()
             } else {
+                autoHideTask?.cancel()
                 withAnimation { showControls = true }
                 unhideCursor()
             }
@@ -114,18 +116,18 @@ struct PlayerView: View {
         lastInteraction = Date()
         withAnimation { showControls = true }
         if cursorHidden { unhideCursor() }
+        autoHideTask?.cancel()
         scheduleAutoHide()
     }
 
     private func scheduleAutoHide() {
-        let autoHideDelay: TimeInterval = 3
-        DispatchQueue.main.asyncAfter(deadline: .now() + autoHideDelay) { [weak session] in
-            guard let session, session.playState == .playing else { return }
+        autoHideTask?.cancel()
+        autoHideTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if Task.isCancelled { return }
+            guard session.playState == .playing else { return }
             let elapsed = Date().timeIntervalSince(lastInteraction)
-            guard elapsed >= autoHideDelay else {
-                scheduleAutoHide()
-                return
-            }
+            guard elapsed >= 3 else { scheduleAutoHide(); return }
             withAnimation { showControls = false }
             hideCursor()
         }
