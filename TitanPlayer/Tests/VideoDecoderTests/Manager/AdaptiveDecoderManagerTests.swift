@@ -18,7 +18,7 @@ final class AdaptiveDecoderManagerTests: XCTestCase {
     func testPlaybackErrorHasDecodingFailedCase() {
         let underlyingError = DecoderError.unsupportedCodec("test")
         let error = PlaybackError.decodingFailed(underlyingError)
-        if case .decodingFailed(let wrapped) = error {
+        if case .decodingFailed(let wrapped, _) = error {
             XCTAssertTrue(wrapped is DecoderError)
         } else {
             XCTFail("Expected decodingFailed case")
