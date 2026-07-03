@@ -25,6 +25,7 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
+      - run: brew install libass
       - run: cd TitanPlayer && swift build -j 1
 
   swiftpm-tests:
@@ -35,6 +36,7 @@ jobs:
       ASAN_OPTIONS: detect_leaks=1:halt_on_error=1
     steps:
       - uses: actions/checkout@v4
+      - run: brew install libass
       - run: cd TitanPlayer && swift test --parallel
 
   coverage-gate:
@@ -86,6 +88,7 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
+      - run: brew install libass
       - name: Generate Xcode project (xcodegen)
         run: |
           brew install xcodegen || true
