@@ -35,7 +35,6 @@ enum TelemetryEvent {
 enum PlaybackSource: String, Sendable {
     case local
     case hls
-    case dash
 }
 
 enum TelemetryHDRMode: String, Sendable {

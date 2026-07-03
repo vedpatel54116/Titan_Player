@@ -3,12 +3,11 @@ import AVFoundation
 import Combine
 
 enum StreamingRoutingExtension {
-    case m3u8, mpd, other
+    case m3u8, other
 
     init(url: URL) {
         switch url.pathExtension.lowercased() {
         case "m3u8": self = .m3u8
-        case "mpd":  self = .mpd
         default:     self = .other
         }
     }
@@ -84,19 +83,6 @@ final class StreamingManager: ObservableObject {
             currentQuality = .auto
             availableQualities = []
             _ = asset
-        case .mpd:
-            let dashPlayer = DASHPlayerFactory.player(for: url)
-            Task {
-                do {
-                    let session = try await dashPlayer.streamSession(for: url)
-                    _ = session
-                    streamingState = .ready
-                    currentQuality = .auto
-                    availableQualities = await dashPlayer.currentVariants
-                } catch {
-                    streamingState = .error(error.localizedDescription)
-                }
-            }
         case .other:
             streamingState = .idle
         }

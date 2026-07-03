@@ -43,7 +43,7 @@ final class PlaybackSessionTests: XCTestCase {
 
     func testIsHDRContentFlipsOnHDRDelegateCallback() {
         let s = makeSession()
-        let r = MetalRenderer()
+        let r = try! MetalRenderer.make()
         r.delegate = s
         r.handleHDR(HDRMetadata(type: .hdr10, maxLuminance: 1000, minLuminance: 0))
         XCTAssertTrue(s.isHDRContent)
