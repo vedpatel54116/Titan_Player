@@ -66,13 +66,9 @@ final class StreamingManagerTests: XCTestCase {
         XCTAssertEqual(hls.makeAssetCalls.first, url)
     }
 
-    func testMPDURLErrorState() {
+    func testLoadNonStreamingIsNoOp() {
         let url = URL(string: "https://example.com/x.mpd")!
         manager.load(url: url)
-        if case .error(let msg) = manager.streamingState {
-            XCTAssertTrue(msg.contains("DASH"))
-        } else {
-            XCTFail("Expected error state for DASH")
-        }
+        XCTAssertEqual(manager.streamingState, .idle)
     }
 }

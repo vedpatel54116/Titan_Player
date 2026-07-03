@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		000A0B68B585042E42CBAE21 /* DASHPlayerImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A4F0563C1084CF2AD8154AD /* DASHPlayerImpl.swift */; };
 		02E35338C94CB7AF329ED29B /* AudioMetrics.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB14DBCF2822DE5E8A6A61D5 /* AudioMetrics.swift */; };
 		0325B530157E45A369D6C4C3 /* CoreAudioBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A13A0340A41AAABE5BE341F1 /* CoreAudioBridge.swift */; };
 		03E590BD0B76E515C26B0527 /* ExternalDisplayConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = E92796D7F639F965AFD7B440 /* ExternalDisplayConfig.swift */; };
@@ -54,7 +53,6 @@
 		4B89AF9D171BDCB9A6FA0F12 /* SubtitleParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E87F484366206A4E409FA52 /* SubtitleParser.swift */; };
 		4BD1A5D5CE96C839395190A1 /* AirPlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 396A9D631F90242556FB0FED /* AirPlayController.swift */; };
 		4C5A7AE4A4000FAFD5552112 /* HardwareDecoderCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D63D92E612BCC4FB850FB6 /* HardwareDecoderCapabilities.swift */; };
-		4CE5295402705566687D9D24 /* DASHPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 144BCEBE92DF3DB2B69C6FFD /* DASHPlayer.swift */; };
 		4E8DB7100E4CA9472FD4A910 /* StorageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20ECD2AD39620616540ECCFD /* StorageManager.swift */; };
 		4FABE846F9DB1FBC15064ECC /* VectorscopeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 714D68480CB917620F542098 /* VectorscopeView.swift */; };
 		50FF56E8ECF5D5F8721B19F7 /* ExternalDisplayWindow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 99522236DA295F66A8FD61FC /* ExternalDisplayWindow.swift */; };
@@ -62,7 +60,6 @@
 		55B58F756A97ECC7ADDFEAC3 /* PlaybackEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = B488E7AEC52EA461AE7D016D /* PlaybackEngine.swift */; };
 		56001BC60E204FCEB67A2D29 /* LibAssRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C117004C72FACA8883720154 /* LibAssRenderer.swift */; };
 		57C78D96D6FEB19E86DA5A66 /* PlaybackSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2726E6DD3A21712852797EBD /* PlaybackSession.swift */; };
-		5AB591B9D9DFCF0CA8E881F5 /* DASHABRController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1638A27C79D0953B6BC5A149 /* DASHABRController.swift */; };
 		5B7B2371CC76D646AF377585 /* ExternalTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A37C5DC52E1E329AA876BEA /* ExternalTracker.swift */; };
 		5CF2E5DC7D2482EBA3440068 /* HRTFProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = EF9125E5C712DBF60FEFB16D /* HRTFProcessor.swift */; };
 		5D6E4299677E403AE8F99722 /* AdaptiveQualityController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 180644F91D1C712FA90139C6 /* AdaptiveQualityController.swift */; };
@@ -70,11 +67,9 @@
 		6174C7CE819282FF5CC4F5F7 /* Libswscale in Frameworks */ = {isa = PBXBuildFile; productRef = A0421AA94CC47871B6D4CCAD /* Libswscale */; };
 		6202F77309371D6F1D01C636 /* DisplayRoutePickerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 970627C4D326E82C1D1878BC /* DisplayRoutePickerView.swift */; };
 		62B487CC65B749A7A961B0B6 /* AudioRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 94EB475DCFFEF7781138AADB /* AudioRenderer.swift */; };
-		63322AE79AB32F3B6D9FD693 /* NotImplementedDASHPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58E7EEA037C60DC5DD7F1D32 /* NotImplementedDASHPlayer.swift */; };
 		63CF804CB3FA10DA08B2367A /* PrivacyConsentDialog.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7875FD7118D23122704C80DC /* PrivacyConsentDialog.swift */; };
 		65A2CDC6CBD8B73E976CB6D5 /* ResourcePrediction.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE6B57C4BBA7CC2F99A5159E /* ResourcePrediction.swift */; };
 		661D4CE0112AF63EFB53B558 /* AudioMeterBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 70B148115C23CC639294003E /* AudioMeterBar.swift */; };
-		66CBFDB317F38493362BAB41 /* DASHStreamSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D0FFB6AF8DC3B03D41FB052 /* DASHStreamSession.swift */; };
 		6783E023580A25FCB9D97D03 /* DecoderCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1DA8C82EC4F5B27B063E159D /* DecoderCapabilities.swift */; };
 		67A3906F6094D6527B9FCF46 /* MetalMtkView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1BCA77D4F3A787D3F126503 /* MetalMtkView.swift */; };
 		6C1A5B85387CA9A4B37265D8 /* SharedTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E0120BB5DEFD6C63EDB6A07 /* SharedTypes.swift */; };
@@ -90,12 +85,10 @@
 		7B1F7B9D492157C03E646EC7 /* AudioFormatDetector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1EA95197B158617D62DF39F /* AudioFormatDetector.swift */; };
 		7F808F7CDE5F119D067948BB /* HDRTypes.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA9B22B4B7050342B8471C44 /* HDRTypes.swift */; };
 		80CBB9547732586210605960 /* ColorPickerOverlay.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE6E307967612C6B7B765341 /* ColorPickerOverlay.swift */; };
-		832A9B724C01CD1B6577486E /* MPDParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D91C3A6CCDDCEEC9A40CCFC /* MPDParser.swift */; };
 		83C6277E42A8236EA69E5245 /* ScreenLookup.swift in Sources */ = {isa = PBXBuildFile; fileRef = ECBF6D77FEA1B533AC437680 /* ScreenLookup.swift */; };
 		84C7A2444D02E5BEBD56CA46 /* Libavcodec in Frameworks */ = {isa = PBXBuildFile; productRef = BC59DA563ACC96E73FA6AA34 /* Libavcodec */; };
 		8696FFD3E1F6753ABC14934A /* DisplayRenderTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3B6345568F55FC31F79BCB22 /* DisplayRenderTarget.swift */; };
 		87FBDE035F28F6615D81B9BF /* ChannelLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = 21AD50868C740A74056CFF91 /* ChannelLayout.swift */; };
-		88E6ADA892BC04538A1F7C46 /* DASHQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFDCADAE4E49D8796EF00545 /* DASHQuality.swift */; };
 		894DA3FDFEDC3FF3BF8DC703 /* MetalRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD8FD65D8023C715EC6AF9A3 /* MetalRenderer.swift */; };
 		8A43669EBB656E4D89868BA1 /* HLSPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 846C872228D8B85D9952EA6E /* HLSPlayer.swift */; };
 		8B09B680754FB3F5089EA14C /* ParameterSetParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 208B5A37F7BCC83071F63FF1 /* ParameterSetParser.swift */; };
@@ -123,7 +116,6 @@
 		B0D523A55D23D43576540BCA /* TouchBarProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0CF3F8E4B65FB31146312417 /* TouchBarProvider.swift */; };
 		B2346AF7077A78A3FD4A878B /* HeadTrackingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35CFE3B0347402C66888E628 /* HeadTrackingManager.swift */; };
 		B573D4F3C084C689C7F6282D /* LibraryWindowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 915AAEC82D4AD917EF14BB5E /* LibraryWindowView.swift */; };
-		B767C38F53B1F4CC8091A19E /* MPDManifest.swift in Sources */ = {isa = PBXBuildFile; fileRef = DF30C2709F5FA80CB62878D0 /* MPDManifest.swift */; };
 		BC76A5CE7FA2B70332CABDF3 /* NetworkMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE75152CB87F998BC514D90E /* NetworkMonitor.swift */; };
 		BD385774F2C1262C1B3EA601 /* Libavformat in Frameworks */ = {isa = PBXBuildFile; productRef = D8A4736597E0398A0280B455 /* Libavformat */; };
 		BF49473E9139EAD26DF13F63 /* AVFoundationDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E745E8286632EB0EFE8FB6B9 /* AVFoundationDecoder.swift */; };
@@ -159,7 +151,6 @@
 		F7483BD2E3885B927AD9C747 /* MiniControlBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DF9AC46768981A4884E1CEC /* MiniControlBar.swift */; };
 		FD06BF83C539F5D7FFBCF7FC /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF6A1F7DBFA98B49A8B9485 /* SidebarView.swift */; };
 		FEA8B9EFA27B5197230E13F5 /* VideoToolboxDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8816B0344655D064735D64C1 /* VideoToolboxDecoder.swift */; };
-		FF028C7E0E079129BC7E8A1E /* DASHPlayerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53AA3513AE45E8CDC08495EA /* DASHPlayerFactory.swift */; };
 		FF97C60F02FB0CFF1B8048E9 /* PlaybackHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5491380675E13C6203ECA8 /* PlaybackHistory.swift */; };
 		4A7C62609C0144098A73AB61 /* AudioTapProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3378DF23CD924BCA9A34E08C /* AudioTapProvider.swift */; };
 		32A3C15CA9444AB691FB2988 /* AVPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC90A3C7CC374206A961B997 /* AVPlayerView.swift */; };
@@ -178,14 +169,10 @@
 		0E87F484366206A4E409FA52 /* SubtitleParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleParser.swift; sourceTree = "<group>"; };
 		0F718EB2935D05BB30E57EE2 /* ControlBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ControlBar.swift; sourceTree = "<group>"; };
 		1350CE08127FBDD8B6BE6396 /* MediaPipeline.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPipeline.swift; sourceTree = "<group>"; };
-		144BCEBE92DF3DB2B69C6FFD /* DASHPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DASHPlayer.swift; sourceTree = "<group>"; };
-		1638A27C79D0953B6BC5A149 /* DASHABRController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DASHABRController.swift; sourceTree = "<group>"; };
 		1691B005F831D894715DF2F1 /* AirPodsTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirPodsTracker.swift; sourceTree = "<group>"; };
 		172B63368575BBAEAA890C4A /* TitanCommands.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TitanCommands.swift; sourceTree = "<group>"; };
 		180644F91D1C712FA90139C6 /* AdaptiveQualityController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveQualityController.swift; sourceTree = "<group>"; };
-		1D0FFB6AF8DC3B03D41FB052 /* DASHStreamSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DASHStreamSession.swift; sourceTree = "<group>"; };
 		1D7DF510143D1BFD0D23DA2A /* FFmpegBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegBridge.swift; sourceTree = "<group>"; };
-		1D91C3A6CCDDCEEC9A40CCFC /* MPDParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MPDParser.swift; sourceTree = "<group>"; };
 		1DA8C82EC4F5B27B063E159D /* DecoderCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecoderCapabilities.swift; sourceTree = "<group>"; };
 		206B7CDA53A17BBA94BEBB35 /* KeyboardShortcutManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyboardShortcutManager.swift; sourceTree = "<group>"; };
 		208B5A37F7BCC83071F63FF1 /* ParameterSetParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParameterSetParser.swift; sourceTree = "<group>"; };
@@ -211,8 +198,6 @@
 		43D1645CF35E0738F4E29ABF /* TimeObserver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimeObserver.swift; sourceTree = "<group>"; };
 		4C60A5895373F5FB374AB9F4 /* DisplayManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayManager.swift; sourceTree = "<group>"; };
 		4F1FE4DE12717625E1A17519 /* FormatDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FormatDecoder.swift; sourceTree = "<group>"; };
-		53AA3513AE45E8CDC08495EA /* DASHPlayerFactory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DASHPlayerFactory.swift; sourceTree = "<group>"; };
-		58E7EEA037C60DC5DD7F1D32 /* NotImplementedDASHPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotImplementedDASHPlayer.swift; sourceTree = "<group>"; };
 		59656A2F099F9DBE600DD4A3 /* AudioMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMetadata.swift; sourceTree = "<group>"; };
 		5AA0A121D2534E93232C98ED /* KeyEquivalentResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyEquivalentResolver.swift; sourceTree = "<group>"; };
 		5C3227595CED148541C540B8 /* AudioClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioClock.swift; sourceTree = "<group>"; };
@@ -222,7 +207,6 @@
 		64BDC528DC434197AD88A321 /* HDR10PlusParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HDR10PlusParser.swift; sourceTree = "<group>"; };
 		65315CE75C8802C4027BC4F8 /* AudioTappable.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTappable.swift; sourceTree = "<group>"; };
 		69CF2C86CE259361BDBC50EC /* LFSAudioMeter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LFSAudioMeter.swift; sourceTree = "<group>"; };
-		6A4F0563C1084CF2AD8154AD /* DASHPlayerImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DASHPlayerImpl.swift; sourceTree = "<group>"; };
 		6B4D8B6C6C392F1CBE9E911D /* NSWindowAccessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSWindowAccessor.swift; sourceTree = "<group>"; };
 		6DEA0779795C15FFDA566411 /* SubtitleTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleTypes.swift; sourceTree = "<group>"; };
 		6EF06905CA8341C71E404862 /* Reach.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reach.swift; sourceTree = "<group>"; };
@@ -271,7 +255,6 @@
 		AB14DBCF2822DE5E8A6A61D5 /* AudioMetrics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMetrics.swift; sourceTree = "<group>"; };
 		AC10BC98ABDB6F622CA752DF /* MacModelIdentifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MacModelIdentifier.swift; sourceTree = "<group>"; };
 		AD4ED308B1FC5B4D743AACCB /* MirrorMTKView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MirrorMTKView.swift; sourceTree = "<group>"; };
-		AFDCADAE4E49D8796EF00545 /* DASHQuality.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DASHQuality.swift; sourceTree = "<group>"; };
 		B0CC14EF6BCD84820798C7CD /* SystemDisplayProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemDisplayProvider.swift; sourceTree = "<group>"; };
 		B3C5B480F7C000A3F1102DF6 /* SubtitleManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleManager.swift; sourceTree = "<group>"; };
 		B488E7AEC52EA461AE7D016D /* PlaybackEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackEngine.swift; sourceTree = "<group>"; };
@@ -298,7 +281,6 @@
 		DBF418BC7F87A02299F78FB4 /* SoftwareCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SoftwareCapabilities.swift; sourceTree = "<group>"; };
 		DCFC6650294E414C5BFB7761 /* FrameStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrameStore.swift; sourceTree = "<group>"; };
 		DD77603A95256C486C9CBEE6 /* MediaDemuxing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaDemuxing.swift; sourceTree = "<group>"; };
-		DF30C2709F5FA80CB62878D0 /* MPDManifest.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MPDManifest.swift; sourceTree = "<group>"; };
 		DF82F6246DB6463B03339604 /* ShaderTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShaderTypes.swift; sourceTree = "<group>"; };
 		E745E8286632EB0EFE8FB6B9 /* AVFoundationDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVFoundationDecoder.swift; sourceTree = "<group>"; };
 		E92796D7F639F965AFD7B440 /* ExternalDisplayConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalDisplayConfig.swift; sourceTree = "<group>"; };
@@ -356,7 +338,6 @@
 				83450C91906EF10C2AFC4078 /* StreamingManager.swift */,
 				212B59B9F31B48A8CDED723F /* StreamingQuality.swift */,
 				71510028C093F5E715B000E1 /* Cache */,
-				F46AEA4E46D6C5CB1B7A4DEB /* DASH */,
 				5A16837649361AD7F09AF454 /* HLS */,
 				E65EC5C1BC3FEBB9F9D2F0F5 /* Network */,
 			);
@@ -814,21 +795,6 @@
 			path = Displays;
 			sourceTree = "<group>";
 		};
-		F46AEA4E46D6C5CB1B7A4DEB /* DASH */ = {
-			isa = PBXGroup;
-			children = (
-				1638A27C79D0953B6BC5A149 /* DASHABRController.swift */,
-				144BCEBE92DF3DB2B69C6FFD /* DASHPlayer.swift */,
-				53AA3513AE45E8CDC08495EA /* DASHPlayerFactory.swift */,
-				6A4F0563C1084CF2AD8154AD /* DASHPlayerImpl.swift */,
-				1D0FFB6AF8DC3B03D41FB052 /* DASHStreamSession.swift */,
-				1D91C3A6CCDDCEEC9A40CCFC /* MPDParser.swift */,
-				58E7EEA037C60DC5DD7F1D32 /* NotImplementedDASHPlayer.swift */,
-				9B375034F2DF8641A381A618 /* Models */,
-			);
-			path = DASH;
-			sourceTree = "<group>";
-		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -968,12 +934,6 @@
 				45E4E3A4FFAC4374E2EF6F72 /* ContentView.swift in Sources */,
 				8E91440A64CF60C4CC089B39 /* ControlBar.swift in Sources */,
 				0325B530157E45A369D6C4C3 /* CoreAudioBridge.swift in Sources */,
-				5AB591B9D9DFCF0CA8E881F5 /* DASHABRController.swift in Sources */,
-				4CE5295402705566687D9D24 /* DASHPlayer.swift in Sources */,
-				FF028C7E0E079129BC7E8A1E /* DASHPlayerFactory.swift in Sources */,
-				000A0B68B585042E42CBAE21 /* DASHPlayerImpl.swift in Sources */,
-				88E6ADA892BC04538A1F7C46 /* DASHQuality.swift in Sources */,
-				66CBFDB317F38493362BAB41 /* DASHStreamSession.swift in Sources */,
 				6783E023580A25FCB9D97D03 /* DecoderCapabilities.swift in Sources */,
 				EEC6948ADC444D9CEE2DFD38 /* DecoderSelector.swift in Sources */,
 				1739E0FB136FE955D29376D8 /* DisplayCapabilities.swift in Sources */,
@@ -1015,8 +975,6 @@
 				56001BC60E204FCEB67A2D29 /* LibAssRenderer.swift in Sources */,
 				361CABC404FF47E71AD01038 /* LibraryViewModel.swift in Sources */,
 				B573D4F3C084C689C7F6282D /* LibraryWindowView.swift in Sources */,
-				B767C38F53B1F4CC8091A19E /* MPDManifest.swift in Sources */,
-				832A9B724C01CD1B6577486E /* MPDParser.swift in Sources */,
 				EA7243A3FB3E75D887C0B988 /* MacModelIdentifier.swift in Sources */,
 				3FDC225961DDE21A04A0D2B5 /* MediaDecoding.swift in Sources */,
 				26461A1BCA81E8530B9BAF4E /* MediaDemuxing.swift in Sources */,
@@ -1030,7 +988,6 @@
 				96CC07B886C85838ED171D09 /* MirrorMTKView.swift in Sources */,
 				12BE9B768694E20E99A2F93B /* NSWindowAccessor.swift in Sources */,
 				BC76A5CE7FA2B70332CABDF3 /* NetworkMonitor.swift in Sources */,
-				63322AE79AB32F3B6D9FD693 /* NotImplementedDASHPlayer.swift in Sources */,
 				8B09B680754FB3F5089EA14C /* ParameterSetParser.swift in Sources */,
 				8C3FEBC931E695C341B78D5A /* PerformanceContext.swift in Sources */,
 				3BCB67D8D04CC081649CA450 /* PerformanceMonitor.swift in Sources */,

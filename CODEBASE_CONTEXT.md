@@ -1,13 +1,14 @@
 # CODEBASE_CONTEXT.md
 
 ## 1. Project Identity
+- Last verified: 2026-07-03
 - One-sentence purpose: macOS video player with HDR rendering, spatial audio, adaptive performance management, and real-time video analysis tools.
 - Domain / industry: Media playback / video player
 - Target users: macOS power users interested in HDR playback, spatial audio, and video analysis (histogram/vectorscope/waveform)
 - Primary languages: Swift (100%), Metal Shading Language
 - Frameworks & major libraries: SwiftUI (AppKit/NSViewRepresentable), AVFoundation, Metal, AVFAudio, CoreAudio, Accelerate, NWPathMonitor, simd, Combine, FFmpeg (via external `FFmpegBuild` package providing Libavcodec/libavformat/libavutil/libswscale)
 - Build / package tooling: SwiftPM 5.9, XcodeGen (`project.yml`), Fastlane (`fastlane/`)
-- Repo root path / name: `/Users/vedpatelicloud.com/Documents/Titan Player` — TitanPlayer
+- Repo root path / name: `<local clone path>/TitanPlayer` — TitanPlayer
 
 ## 2. Repository Map
 - `Benchmarks/` — Standalone SwiftPM package for benchmarking (has own `Tests/` and `Sources/`) [Benchmarks/Package.swift]
@@ -112,7 +113,7 @@
 
 ### Module: Streaming
 - Responsibility: HLS playback, bitrate observation, streaming cache (download/delete HLS assets), network monitor, stats publishing
-- Location (dir or primary file): Core/Streaming/ (StreamingManager.swift, HLS/, DASH/, Cache/, Network/)
+- Location (dir or primary file): Core/Streaming/ (StreamingManager.swift, HLS/, Cache/, Network/)
 - Public API:
   - `StreamingManager.load(url:)` — open HLS asset [StreamingManager.swift:79]
   - `StreamingManager.switchToQuality(_:)` — change variant bitrate [StreamingManager.swift]
@@ -211,8 +212,11 @@
 
 ## 8. Cross-Cutting Concerns
 - Authentication: N/A — no user authentication
-- Authorization: Sandbox entitlements restrict access: movies read-write, audio-input, network client/server | [TitanPlayer.entitlements]
-- Logging: `os.log` via `Logger(subsystem:category:)` — only in AudioEngine (`com.titanplayer.audio`) | [Core/Engine/Audio/AudioEngine.swift:9]
+- Authorization: Sandbox entitlements restrict access: movies read-write, network client | [TitanPlayer.entitlements]
+- Logging: `os.log` via `Logger(subsystem:category:)` — used across multiple modules:
+  - `com.titanplayer.audio`: AudioEngine, FormatNegotiator, Diagnostics
+  - `com.titanplayer.app`: PlaybackSession (FileOpen)
+  - `com.titanplayer`: MediaPipeline, PlaybackEngine, MetalRenderer, MetalShaders, HDRMetadataProcessor, PixelBufferPool, SeekCoordinator, AudioDeviceMonitor, MetadataPassthrough, AdaptiveDecoderManager, ShortcutConflictChecker, SandboxBookmarkManager
 - Error handling: `PlaybackError` enum with `code` and `errorDescription`; caught in `PlaybackEngine.load()`, propagated via state machine | [Core/Engine/PlaybackError.swift:3, PlaybackEngine.swift:68-97]
   - `DecoderError` with severity (transient/persistent) | [Core/Decoders/VideoDecoder/Protocols/VideoDecoding.swift:7]
   - `RendererError` with `errorDescription` | [Core/Renderers/FrameRendering.swift:13]
@@ -274,7 +278,6 @@
 ## 11. Gotchas & Non-Obvious Behavior
 - `TimeObserver` in `MediaPipeline` uses `Date().timeIntervalSince(startTime)` for current time (wall clock), NOT demuxer PTS — drifts if pipeline stalls | [Core/Engine/TimeObserver.swift:30-31]
 - `FFmpegBridge` is a stub — all methods return zero/nil/default values. No actual FFmpeg C bindings are implemented; real FFmpeg integration relies on the `FFmpegBuild` package but the bridge acts as placeholder | [Core/Decoders/FFmpeg/FFmpegBridge.swift:7-37]
-- `DASHPlayer` returns `NotImplementedDASHPlayer` which throws `StreamingError.dashNotSupported(_:)` for every URL — DASH is not implemented in v1 | [Core/Streaming/DASH/DASHPlayerFactory.swift:7]
 - `AudioTap` wiring uses reflection (`Mirror`) to find a `MediaDecoding` instance inside the engine — fragile if internal property names change | [UI/Session/PlaybackSession.swift:306-317]
 - `MediaPipeline` creates two separate demuxer instances: one `FFmpegDemuxer` for probing, then a potentially different backend for actual playback — probe resources are thrown away | [Core/Engine/MediaPipeline.swift:35-37, 44-49]
 - `HDRMetadataProcessor` expects HDR metadata in `CMSampleBuffer` attachments dictionary under keys `"HDR10PlusMetadata"`, `"DolbyVisionProfile"`, `"DolbyVisionMetadata"`, `"HDR10Metadata"` — these keys must match whatever the decoder/probe layer populates | [HDRMetadataProcessor.swift:152-192]
@@ -295,7 +298,6 @@
 - **ACES** — Academy Color Encoding System, reference tone mapping curve used as fallback when no dynamic metadata | [Resources/Shaders/HDR.metal:28]
 - **RPU** — Reference Processing Unit, Dolby Vision's per-frame metadata structure | [HDRTypes.swift:147]
 - **HLS** — HTTP Live Streaming, Apple's adaptive streaming protocol (.m3u8) | [Core/Streaming/StreamingManager.swift:7-17]
-- **DASH** — Dynamic Adaptive Streaming over HTTP (.mpd) — NOT implemented in v1 | [Core/Streaming/DASH/NotImplementedDASHPlayer.swift:5-6]
 - **HRTF** — Head-Related Transfer Function, spatial audio filter for 3D sound positioning | [Core/Engine/Audio/AudioEngine.swift:30]
 - **BS.1770** — ITU standard for loudness metering (EBU R128), K-weighted pre-filter + true-peak | [Core/Analysis/LFSAudioMeter.swift:6]
 - **ICtCp** — Color space used by Dolby Vision Profile 8 IPT-PQ | [HDRTypes.swift:101]

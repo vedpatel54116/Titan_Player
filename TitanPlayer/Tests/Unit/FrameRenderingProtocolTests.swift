@@ -7,7 +7,7 @@ import CoreMedia
 final class FrameRenderingProtocolTests: XCTestCase {
 
     func testMetalRendererConformsToFrameRendering() {
-        let renderer: FrameRendering? = MetalRenderer()
+        let renderer: FrameRendering? = try? MetalRenderer.make()
         XCTAssertNotNil(renderer)
     }
 
@@ -38,7 +38,7 @@ final class FrameRenderingProtocolTests: XCTestCase {
     }
 
     func testMetalRendererImplementsAllProtocolMethods() throws {
-        let renderer = MetalRenderer()
+        let renderer = try MetalRenderer.make()
         let pixelBuffer = makeBlankPixelBuffer()
         let frame = VideoFrame(
             pixelBuffer: pixelBuffer,
