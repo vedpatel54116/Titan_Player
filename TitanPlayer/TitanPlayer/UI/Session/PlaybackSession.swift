@@ -42,14 +42,16 @@ final class PlaybackSession: ObservableObject {
 
     let frameStore = FrameStore()
     let shortcutManager = KeyboardShortcutManager()
-    var analysis: VideoAnalysisManager?
-    let displayManager: DisplayManager
-    let airPlayController: AirPlayController
+    let displayCoordinator: DisplayCoordinator
+    let telemetryCoordinator: PlaybackTelemetryCoordinator
+
+    var displayManager: DisplayManager { displayCoordinator.displayManager }
+    var airPlayController: AirPlayController { displayCoordinator.airPlayController }
+    var analysis: VideoAnalysisManager? { telemetryCoordinator.analysis }
+    var performance: PerformanceOptimizer { telemetryCoordinator.performance }
     let streaming: StreamingManager
-    let performance: PerformanceOptimizer
 
     private var keyMonitorToken: Any?
-    private var secondaryDisplayWindow: ExternalDisplayWindow?
 
     private let engine: PlaybackEngine
     var avPlayer: AVPlayer { engine.avPlayer }
@@ -100,26 +102,17 @@ final class PlaybackSession: ObservableObject {
         if let metal = resolvedVideoRenderer as? MetalRenderer {
             metal.frameStore = frameStore
         }
-        // Video analysis: own a VideoAnalysisManager that subscribes to the
-        // session's frame store. Initialize early so `self` is fully available
-        // before we register it as the renderer's delegate below.
-        if let device = MTLCreateSystemDefaultDevice() {
-            self.analysis = VideoAnalysisManager(metalDevice: device)
-            analysis?.attach(frameStore: frameStore)
-        }
-        self.engine = PlaybackEngine(
-            videoRenderer: engineVideoRenderer
-        )
-        self.displayManager = DisplayManager()
-        self.airPlayController = AirPlayController(monitor: engine.avPlayer)
+        self.engine = PlaybackEngine(videoRenderer: engineVideoRenderer)
         self.streaming = StreamingManager.makeDefault()
-        let perf = PerformanceOptimizer.makeDefault()
-        if let metal = resolvedVideoRenderer as? MetalRenderer {
-            perf.registerAdapter(RenderAdapter(target: metal))
-        }
-        perf.registerAdapter(DecoderAdapter(target: engine.adaptiveDecoderManager))
-        perf.registerAdapter(StreamingAdapter(target: self.streaming))
-        self.performance = perf
+
+        self.displayCoordinator = DisplayCoordinator(airPlayPlayer: engine.avPlayer)
+        self.telemetryCoordinator = PlaybackTelemetryCoordinator(
+            metalRenderer: resolvedVideoRenderer as? MetalRenderer,
+            engine: engine,
+            streaming: streaming,
+            frameStore: frameStore
+        )
+
         if let metal = resolvedVideoRenderer as? MetalRenderer {
             metal.delegate = self
         }
@@ -129,7 +122,7 @@ final class PlaybackSession: ObservableObject {
         installAudioTap()
         setupBindings()
         installKeyMonitor()
-        installDisplayBindings()
+        displayCoordinator.installDisplayBindings(renderer: renderer, engine: engine)
         SessionLocator.shared.attach(self)
         NotificationCenter.default.addObserver(
             self,
@@ -137,9 +130,7 @@ final class PlaybackSession: ObservableObject {
             name: NSApplication.willTerminateNotification,
             object: nil
         )
-        Task.detached(priority: .background) { [performance] in
-            performance.startPerformanceMonitor()
-        }
+        telemetryCoordinator.startMonitor()
     }
 
     var isMediaLoaded: Bool {
@@ -254,8 +245,7 @@ final class PlaybackSession: ObservableObject {
         subtitleManager.clear()
         performance.observe(settings: nil)
         stopAccessingCurrentResource()
-        secondaryDisplayWindow?.close()
-        secondaryDisplayWindow = nil
+        displayCoordinator.teardown()
     }
 
     @objc private func applicationWillTerminate() {
@@ -310,106 +300,6 @@ final class PlaybackSession: ObservableObject {
         subtitleManager.$currentBitmap
             .receive(on: DispatchQueue.main)
             .assign(to: &$currentSubtitleBitmap)
-    }
-
-    private func installDisplayBindings() {
-        displayManager.$activeDisplay
-            .compactMap { $0 }
-            .removeDuplicates()
-            .sink { [weak self] config in
-                guard let self else { return }
-                guard let screen = ScreenLookup.screen(forStableID: config.stableID),
-                      let metal = self.renderer as? MetalRenderer else { return }
-                metal.updateDisplayCapabilitiesAsynchronously(for: screen)
-            }
-            .store(in: &cancellables)
-
-        displayManager.events
-            .sink { [weak self] event in
-                guard let self else { return }
-                switch event {
-                case .connected(let config):
-                    self.handleDisplayConnected(config)
-                case .disconnected(let stableID):
-                    self.handleDisplayDisconnected(stableID)
-                case .primaryChanged(let config):
-                    self.handlePrimaryChanged(config)
-                case .refreshed:
-                    break
-                }
-            }
-            .store(in: &cancellables)
-
-        airPlayController.$currentAudioDelayOffset
-            .removeDuplicates()
-            .sink { [weak self] offset in
-                self?.engine.setAudioDelay(offset)
-            }
-            .store(in: &cancellables)
-    }
-
-    private func handleDisplayConnected(_ config: ExternalDisplayConfig) {
-        guard config.stableID != displayManager.primaryDisplay?.stableID else { return }
-        guard let metal = renderer as? MetalRenderer else { return }
-        guard let screen = ScreenLookup.screen(forStableID: config.stableID) else { return }
-
-        let detector = DisplayCapabilityDetector()
-        let caps = detector.detectCapabilities(for: screen)
-        let icc = detector.detectICCProfile(for: screen)
-
-        guard let device = MTLCreateSystemDefaultDevice() else { return }
-        let window = ExternalDisplayWindow(device: device)
-        window.show(on: screen)
-        secondaryDisplayWindow = window
-
-        metal.addDisplayTarget(
-            stableID: config.stableID,
-            layer: window.metalLayer,
-            capabilities: caps,
-            iccProfile: icc
-        )
-    }
-
-    private func handleDisplayDisconnected(_ stableID: String) {
-        guard let metal = renderer as? MetalRenderer else { return }
-        metal.removeDisplayTarget(stableID: stableID)
-
-        secondaryDisplayWindow?.close()
-        secondaryDisplayWindow = nil
-    }
-
-    private func handlePrimaryChanged(_ config: ExternalDisplayConfig) {
-        if let screen = ScreenLookup.screen(forStableID: config.stableID),
-           let window = NSApp.keyWindow ?? NSApp.windows.first {
-            window.setFrameOrigin(screen.frame.origin)
-        }
-
-        guard let metal = renderer as? MetalRenderer else { return }
-
-        if let oldSecondary = displayManager.secondaryDisplay {
-            metal.removeDisplayTarget(stableID: oldSecondary.stableID)
-            secondaryDisplayWindow?.close()
-            secondaryDisplayWindow = nil
-        }
-
-        if let secondary = displayManager.secondaryDisplay,
-           let screen = ScreenLookup.screen(forStableID: secondary.stableID) {
-            let detector = DisplayCapabilityDetector()
-            let caps = detector.detectCapabilities(for: screen)
-            let icc = detector.detectICCProfile(for: screen)
-
-            guard let device = MTLCreateSystemDefaultDevice() else { return }
-            let window = ExternalDisplayWindow(device: device)
-            window.show(on: screen)
-            secondaryDisplayWindow = window
-
-            metal.addDisplayTarget(
-                stableID: secondary.stableID,
-                layer: window.metalLayer,
-                capabilities: caps,
-                iccProfile: icc
-            )
-        }
     }
 
     /// Wire the audio tap via direct dependency injection through
