@@ -3,7 +3,7 @@ import CoreMedia
 import Combine
 
 class TimeObserver: ObservableObject {
-    @Published var currentTime: Double = 0
+    @Published private(set) var currentTime: Double = 0
     @Published var duration: Double = 0
     @Published var progress: Double = 0
     @Published var audioVideoDrift: TimeInterval = 0
