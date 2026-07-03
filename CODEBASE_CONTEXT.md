@@ -212,7 +212,7 @@
 
 ## 8. Cross-Cutting Concerns
 - Authentication: N/A — no user authentication
-- Authorization: Sandbox entitlements restrict access: movies read-write, audio-input, network client/server | [TitanPlayer.entitlements]
+- Authorization: Sandbox entitlements restrict access: movies read-write, network client | [TitanPlayer.entitlements]
 - Logging: `os.log` via `Logger(subsystem:category:)` — used across multiple modules:
   - `com.titanplayer.audio`: AudioEngine, FormatNegotiator, Diagnostics
   - `com.titanplayer.app`: PlaybackSession (FileOpen)
