@@ -7,15 +7,15 @@ on:
       - 'TitanPlayer/**'
   pull_request:
     branches: [main]
-    paths:
-      - 'TitanPlayer/**'
   schedule:
-    - cron: '0 6 * * 1'
+    - cron: '0 3 * * 1'
 
 jobs:
   analyze:
-    name: CodeQL Swift Analysis
+    name: Analyze (Swift)
     runs-on: macos-latest
+    permissions:
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -24,8 +24,8 @@ jobs:
         with:
           languages: swift
 
-      - name: Build Swift package
+      - name: Build
         run: cd TitanPlayer && swift build
 
-      - name: Perform CodeQL analysis
+      - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
