@@ -8,7 +8,7 @@ import os
 @MainActor
 final class PlaybackSession: ObservableObject {
     private let logger = Logger(subsystem: "com.titanplayer.app", category: "FileOpen")
-    private let bookmarkLogger = Logger(subsystem: "com.titanplayer.app", category: "BookmarkManager")
+
     @Published var playState: PlaybackState = .idle
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
@@ -33,12 +33,9 @@ final class PlaybackSession: ObservableObject {
     @Published var subtitlePosition: SubtitlePosition = .bottom
     @Published var subtitleBackgroundOpacity: Float = 0.6
 
-    @Published var currentlyAccessedURL: URL?
     @Published var fileOpenError: String?
     @Published var errorMessage: String?
     @Published var initializationError: String?
-
-    private let bookmarkDefaultsKey = "SecurityScopedBookmarks"
 
     @Published var fitMode: FitMode = .fit
     @Published var fitModeOverride: FitMode? = nil
@@ -57,67 +54,27 @@ final class PlaybackSession: ObservableObject {
     private let engine: PlaybackEngine
     var avPlayer: AVPlayer { engine.avPlayer }
     private let subtitleManager = SubtitleManager()
+    private let bookmarks = BookmarkStore()
     private var cancellables = Set<AnyCancellable>()
+
+    var currentlyAccessedURL: URL? { bookmarks.currentlyAccessedURL }
 
     // MARK: - Security-Scoped Bookmark Management
 
     func createBookmark(for url: URL) {
-        do {
-            let bookmarkData = try url.bookmarkData(
-                options: .withSecurityScope,
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            )
-            var bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data] ?? [:]
-            bookmarks[url.path] = bookmarkData
-            UserDefaults.standard.set(bookmarks, forKey: bookmarkDefaultsKey)
-        } catch {
-            bookmarkLogger.error("Failed to create bookmark for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
-        }
+        bookmarks.createBookmark(for: url)
     }
 
     func resolveBookmark(for path: String) -> URL? {
-        guard let bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data],
-              let bookmarkData = bookmarks[path] else {
-            return nil
-        }
-
-        var isStale = false
-        do {
-            let url = try URL(
-                resolvingBookmarkData: bookmarkData,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
-
-            if isStale {
-                bookmarkLogger.warning("Stale bookmark detected for path: \(path, privacy: .public)")
-                removeBookmark(for: path)
-                return nil
-            }
-
-            return url
-        } catch {
-            bookmarkLogger.error("Failed to resolve bookmark for \(path, privacy: .public): \(error.localizedDescription, privacy: .public)")
-            removeBookmark(for: path)
-            return nil
-        }
+        bookmarks.resolveBookmark(for: path)
     }
 
     func removeBookmark(for path: String) {
-        var bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data] ?? [:]
-        bookmarks.removeValue(forKey: path)
-        UserDefaults.standard.set(bookmarks, forKey: bookmarkDefaultsKey)
-        bookmarkLogger.info("Removed stale bookmark for path: \(path, privacy: .public)")
+        bookmarks.removeBookmark(for: path)
     }
 
     func stopAccessingCurrentResource() {
-        if let currentURL = currentlyAccessedURL {
-            currentURL.stopAccessingSecurityScopedResource()
-            bookmarkLogger.info("Stopped accessing: \(currentURL.path, privacy: .public)")
-            currentlyAccessedURL = nil
-        }
+        bookmarks.stopAccessingCurrentResource()
     }
 
     private func showFileAccessError(path: String, reason: String) {
@@ -270,33 +227,13 @@ final class PlaybackSession: ObservableObject {
         logger.info("openFile called with URL: \(url.path, privacy: .public)")
 
         // Stop accessing previous resource if any
-        stopAccessingCurrentResource()
+        bookmarks.stopAccessingCurrentResource()
 
         // Create and store bookmark for new URL
-        createBookmark(for: url)
+        bookmarks.createBookmark(for: url)
 
-        // Resolve bookmark to get fresh URL, with fallback to original URL
-        var accessURL = url
-        if let resolvedURL = resolveBookmark(for: url.path) {
-            logger.info("Bookmark resolved successfully for: \(resolvedURL.path, privacy: .public)")
-            accessURL = resolvedURL
-        } else {
-            logger.warning("Failed to resolve bookmark for: \(url.path, privacy: .public), falling back to original URL")
-        }
-
-        // Start accessing security-scoped resource
-        // For files dragged from Finder or on external volumes, the URL may not be
-        // security-scoped, so startAccessingSecurityScopedResource() may return false.
-        // We log the failure but still attempt to access the file.
-        let accessing = accessURL.startAccessingSecurityScopedResource()
-        if !accessing {
-            logger.warning("startAccessingSecurityScopedResource() returned false for: \(accessURL.path, privacy: .public). Proceeding with file access attempt.")
-        } else {
-            logger.info("Security-scoped access started successfully for: \(accessURL.path, privacy: .public)")
-        }
-
-        // Track the accessed URL for cleanup when playback stops or app closes
-        currentlyAccessedURL = accessURL
+        // Resolve bookmark to get fresh URL, start security-scoped access
+        let accessURL = bookmarks.startAccessing(url: url)
 
         // Load into engine
         do {
@@ -326,7 +263,7 @@ final class PlaybackSession: ObservableObject {
             performance.optimizeForCurrentState()
         } catch {
             logger.error("Failed to load file into engine: \(error.localizedDescription, privacy: .public)")
-            stopAccessingCurrentResource()
+            bookmarks.stopAccessingCurrentResource()
             let message = Self.describe(error: error, for: url)
             showFileAccessError(path: url.path, reason: error.localizedDescription)
             errorMessage = message
