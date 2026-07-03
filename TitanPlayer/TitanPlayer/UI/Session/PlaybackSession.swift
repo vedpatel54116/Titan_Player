@@ -1,13 +1,14 @@
 import SwiftUI
 import Combine
-import AVKit
-import AVFAudio
+@preconcurrency import AVKit
+@preconcurrency import AVFAudio
 import AppKit
 import os
 
 @MainActor
 final class PlaybackSession: ObservableObject {
     private let logger = Logger(subsystem: "com.titanplayer.app", category: "FileOpen")
+    private let bookmarkLogger = Logger(subsystem: "com.titanplayer.app", category: "BookmarkManager")
     @Published var playState: PlaybackState = .idle
     @Published var currentTime: Double = 0
     @Published var duration: Double = 0
@@ -71,7 +72,7 @@ final class PlaybackSession: ObservableObject {
             bookmarks[url.path] = bookmarkData
             UserDefaults.standard.set(bookmarks, forKey: bookmarkDefaultsKey)
         } catch {
-            NSLog("[BookmarkManager] Failed to create bookmark for %@: %@", url.path, error.localizedDescription)
+            bookmarkLogger.error("Failed to create bookmark for \(url.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
         }
     }
 
@@ -91,14 +92,14 @@ final class PlaybackSession: ObservableObject {
             )
 
             if isStale {
-                NSLog("[BookmarkManager] Stale bookmark detected for path: %@", path)
+                bookmarkLogger.warning("Stale bookmark detected for path: \(path, privacy: .public)")
                 removeBookmark(for: path)
                 return nil
             }
 
             return url
         } catch {
-            NSLog("[BookmarkManager] Failed to resolve bookmark for %@: %@", path, error.localizedDescription)
+            bookmarkLogger.error("Failed to resolve bookmark for \(path, privacy: .public): \(error.localizedDescription, privacy: .public)")
             removeBookmark(for: path)
             return nil
         }
@@ -108,13 +109,13 @@ final class PlaybackSession: ObservableObject {
         var bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data] ?? [:]
         bookmarks.removeValue(forKey: path)
         UserDefaults.standard.set(bookmarks, forKey: bookmarkDefaultsKey)
-        NSLog("[BookmarkManager] Removed stale bookmark for path: %@", path)
+        bookmarkLogger.info("Removed stale bookmark for path: \(path, privacy: .public)")
     }
 
     func stopAccessingCurrentResource() {
         if let currentURL = currentlyAccessedURL {
             currentURL.stopAccessingSecurityScopedResource()
-            NSLog("[BookmarkManager] Stopped accessing: %@", currentURL.path)
+            bookmarkLogger.info("Stopped accessing: \(currentURL.path, privacy: .public)")
             currentlyAccessedURL = nil
         }
     }
@@ -135,7 +136,7 @@ final class PlaybackSession: ObservableObject {
                 return "Failed to open \"\(name)\": \(underlying.localizedDescription)"
             case .assetLoadFailedWithStatus(let status, let underlying):
                 return "Failed to open \"\(name)\": OSStatus \(status) — \(underlying.localizedDescription)"
-            case .decodingFailed(let underlying):
+            case .decodingFailed(let underlying, _):
                 return "Failed to open \"\(name)\": Decoding failed — \(underlying.localizedDescription)"
             case .audioOutputFailed(let underlying):
                 return "Failed to open \"\(name)\": Audio output failed — \(underlying.localizedDescription)"
@@ -143,6 +144,14 @@ final class PlaybackSession: ObservableObject {
                 return "Failed to open \"\(name)\": The playback rate is not supported by this file."
             case .seekFailed:
                 return "Failed to open \"\(name)\": Seeking within the file failed."
+            case .networkTimeout:
+                return "Failed to open \"\(name)\": Network request timed out."
+            case .audioFormatUnsupported:
+                return "Failed to open \"\(name)\": The audio format is not supported."
+            case .gpuDeviceLost:
+                return "Failed to open \"\(name)\": GPU device lost."
+            case .drmUnsupported:
+                return "Failed to open \"\(name)\": DRM protection is not supported."
             }
         }
         if let mediaError = error as? MediaError {
