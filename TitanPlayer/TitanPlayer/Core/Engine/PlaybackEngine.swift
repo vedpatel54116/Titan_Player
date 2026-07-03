@@ -191,6 +191,22 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         if let spatialAudioEngine = spatialAudioEngine, spatialAudioEnabled {
             try? spatialAudioEngine.startEngine()
         }
+
+        // --- Audio exclusivity gate ---
+        // AVPlayer is the canonical audio owner for AVFoundation-backed playback.
+        // MediaPipeline's audio tap is only enabled when it is the standalone
+        // audio owner (i.e. AVPlayer is NOT producing audio).
+        let avPlayerOwnsAudio = player.volume > 0
+        let spatialAudioActive = spatialAudioEngine?.isRunning == true
+        let mediaPipelineOwnsAudio = spatialAudioActive && !avPlayerOwnsAudio
+
+        #if DEBUG
+        if avPlayerOwnsAudio && mediaPipelineOwnsAudio {
+            assertionFailure("Dual audio owner detected: both AVPlayer and MediaPipeline audio tap are active simultaneously.")
+        }
+        #endif
+
+        mediaPipeline?.setAudioRenderingEnabled(mediaPipelineOwnsAudio)
         mediaPipeline?.play()
         state = .playing
     }
@@ -208,6 +224,7 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         player.seek(to: .zero)
         audioClock.stop()
         spatialAudioEngine?.stop()
+        mediaPipeline?.setAudioRenderingEnabled(false)
         mediaPipeline?.stop()
         mediaInfo = nil
         itemStatusCancellable = nil
@@ -248,6 +265,9 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     /// Read-only access to the spatial audio engine for audio-tap wiring.
     var activeSpatialAudioEngine: AudioEngine? { spatialAudioEngine }
 
+    /// Exposes whether MediaPipeline's audio rendering is enabled (test seam).
+    var mediaPipelineAudioRenderingEnabled: Bool { mediaPipeline?.audioRenderingEnabled ?? false }
+
     func setSpatialAudioEngine(_ engine: AudioEngine) {
         spatialAudioEngine = engine
         engine.spatialAudioEnabled = spatialAudioEnabled
@@ -259,9 +279,14 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         if enabled {
             spatialAudioEngine?.enableSpatialAudio()
             player.volume = 0
+            // When spatial audio is active, MediaPipeline's audio tap feeds the
+            // spatial engine instead of AVPlayer — transfer audio ownership.
+            mediaPipeline?.setAudioRenderingEnabled(true)
         } else {
             spatialAudioEngine?.disableSpatialAudio()
             player.volume = 1
+            // AVPlayer resumes as the audio owner.
+            mediaPipeline?.setAudioRenderingEnabled(false)
         }
     }
 
