@@ -5,7 +5,9 @@ let package = Package(
     name: "TitanPlayer",
     platforms: [.macOS(.v14)],
     dependencies: [
-        .package(url: "https://github.com/superuser404notfound/FFmpegBuild", branch: "main"),
+        // Fork maintained by superuser404notfound (Vincent Herbst).
+        // For production use, mirror to an org-controlled repository.
+        .package(url: "https://github.com/superuser404notfound/FFmpegBuild", from: "1.0.3"),
         .package(url: "https://github.com/getsentry/sentry-cocoa", from: "8.0.0")
     ],
     targets: [
@@ -27,6 +29,11 @@ let package = Package(
                 .product(name: "Libswscale", package: "FFmpegBuild"),
                 .product(name: "Sentry", package: "sentry-cocoa"),
             ],
+			// TODO: Enable -strict-concurrency=complete once the Sendable
+			// audit is complete (requires @preconcurrency imports, actor
+			// isolation for all @Published properties, and Sendable wrappers
+			// for FFmpeg C types).
+			// swiftSettings: [.enableExperimentalFeature("StrictConcurrency")],
 			path: "TitanPlayer",
 			exclude: [
 				"Info.plist",
