@@ -39,6 +39,9 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     private let videoRenderer: VideoRenderer
     private var mediaPipeline: MediaPipeline?
 
+    /// Typed accessor to the active decoder for audio-tap wiring.
+    var audioTapSource: MediaDecoding? { mediaPipeline?.activeDecoder }
+
     var onNextTrack: (() async -> URL?)?
     var onPlaybackEnded: (() -> Void)?
 
