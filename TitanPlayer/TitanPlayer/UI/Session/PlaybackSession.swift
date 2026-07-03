@@ -236,7 +236,7 @@ final class PlaybackSession: ObservableObject {
             name: NSApplication.willTerminateNotification,
             object: nil
         )
-        Task.detached(priority: .background) { [performance] in
+        Task { @MainActor in
             performance.startPerformanceMonitor()
         }
     }

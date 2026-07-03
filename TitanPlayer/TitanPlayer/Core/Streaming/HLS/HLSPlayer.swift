@@ -6,6 +6,9 @@ protocol HLSPlayerProtocol: AnyObject {
     func purge()
 }
 
+// SAFETY: `cachedAssets` is only accessed from callers that are
+// serialised by the caller's concurrency model (e.g. @MainActor).
+// No concurrent mutation occurs.
 final class HLSPlayer: HLSPlayerProtocol, @unchecked Sendable {
     private var cachedAssets: [String: AVURLAsset] = [:]
 

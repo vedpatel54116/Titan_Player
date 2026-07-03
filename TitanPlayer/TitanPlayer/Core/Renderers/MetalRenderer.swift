@@ -1,6 +1,7 @@
 import Metal
 import MetalKit
 import CoreVideo
+import AVFoundation
 import simd
 import os.log
 

@@ -62,7 +62,13 @@ final class PerformanceOptimizer: ObservableObject {
         userChoice = choice
     }
 
-    func optimizeForCurrentState() {
+    nonisolated func optimizeForCurrentState() {
+        Task { @MainActor in
+            await self._optimizeForCurrentState()
+        }
+    }
+
+    private func _optimizeForCurrentState() async {
         let systemState = monitor.currentSystemState
         let metrics = monitor.recentMetrics
         let settings = lastSettings ?? defaultSettings()
@@ -98,7 +104,7 @@ final class PerformanceOptimizer: ObservableObject {
         )
         self.prediction = prediction
 
-        let actions = controller.evaluate(
+        let actions = await controller.evaluate(
             systemState: systemState,
             prediction: prediction,
             metrics: metrics,

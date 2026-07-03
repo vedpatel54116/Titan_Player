@@ -61,7 +61,7 @@ final class DisplayManager: ObservableObject {
     private let provider: DisplayProviding
     private let detector: ScreenDetecting
     private let persistence: PersistedDisplayConfig
-    private var observer: NSObjectProtocol?
+    private nonisolated(unsafe) var observer: NSObjectProtocol?
     private var lastSeenIDs: Set<String> = []
 
     init(

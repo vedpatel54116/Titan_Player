@@ -24,6 +24,8 @@ enum DecoderOutputFormat: Sendable {
 
 // MARK: - Decoder Output
 
+// SAFETY: Cases wrap CMSampleBuffer and CVImageBuffer, which are
+// Core Foundation reference types that are inherently thread-safe.
 enum DecoderOutput: @unchecked Sendable {
     case sampleBuffer(CMSampleBuffer)
     case pixelBuffer(CVImageBuffer)

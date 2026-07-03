@@ -12,6 +12,11 @@ enum ManagerState: Sendable {
 
 // MARK: - Adaptive Decoder Manager
 
+// SAFETY: Thread safety is provided by:
+// - `preferenceLock` (OSAllocatedUnfairLock) for the preference field
+// - `stateActor` (DecoderStateActor) for activeDecoder and currentState
+// - hardwareDecoder/softwareDecoder are only accessed from async methods
+//   that are serialised by the stateActor's coordination.
 class AdaptiveDecoderManager: @unchecked Sendable {
     // Decoder instances
     private var hardwareDecoder: VideoToolboxDecoder?
