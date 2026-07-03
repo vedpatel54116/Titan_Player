@@ -25,7 +25,19 @@ class MediaPipeline: ObservableObject {
     var currentTime: Double { timeObserver.currentTime }
     var duration: Double { timeObserver.duration }
     var progress: Double { timeObserver.progress }
-    
+
+    /// Exposes the active demuxer backend for test assertions.
+    var demuxerBackendKind: String {
+        switch demuxer {
+        case is FFmpegDemuxer: return "FFmpeg"
+        case is AVFoundationDemuxer: return "AVFoundation"
+        default: return "none"
+        }
+    }
+
+    /// Test seam — exposes the active demuxer instance for identity checks.
+    var demuxerForTest: MediaDemuxing? { demuxer }
+
     func setPlaybackRate(_ rate: Float) {
         playbackRate = max(0.25, min(4.0, rate))
     }
