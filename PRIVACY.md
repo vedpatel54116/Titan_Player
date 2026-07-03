@@ -27,9 +27,22 @@ opt-in and can be disabled at any time from Preferences > Privacy.
 |---|---|
 | Crash reports (stack traces, device info) | Fix crashes and stability issues |
 | Playback failure types (codec, resolution, error code) | Diagnose playback compatibility issues |
-| HDR mode usage (HDR10, Dolby Vision) | Understand HDR feature adoption |
-| Audio format usage (Atmos, Stereo, Spatial) | Understand audio feature adoption |
+| HDR mode usage (HDR10, Dolby Vision, HLG) | Understand HDR feature adoption |
+| Audio format usage (Atmos, Stereo, Spatial, 5.1 Surround) | Understand audio feature adoption |
 | Performance metrics (CPU/GPU usage during 4K playback) | Optimize performance |
+| Compatibility mode activations | Diagnose fallback scenarios |
+
+### Telemetry Event Reference
+
+All events are sent with `sendDefaultPii=false` — no personal identifiers are included. The Sentry DSN is configured via the `SentryDSN` key in `Info.plist`.
+
+| Event | Tags | Extra Fields | Level |
+|---|---|---|---|
+| `playbackFailed` | `codec`, `resolution`, `error_code`, `source` (local/hls) | — | error |
+| `hdrModeUsed` | `hdr_mode` (hdr10/dolbyVision/hlg) | `duration_seconds` | info |
+| `performanceSnapshot` | `resolution`, `codec` | `cpu_percent`, `gpu_percent` | info |
+| `audioFormatUsed` | `audio_format` (atmos/stereo/spatial/surround5_1), `sample_rate`, `bit_depth` | — | info |
+| `compatibilityModeActivated` | `reason`, `source` (local/hls) | — | warning |
 
 ### What is NOT collected:
 
@@ -42,7 +55,8 @@ opt-in and can be disabled at any time from Preferences > Privacy.
 
 - **First launch:** You will be prompted once with a consent dialog
 - **Any time:** Open Preferences (Cmd+,) > Privacy > toggle off "Send anonymous crash reports"
-- **Immediate effect:** Opting out stops all data transmission immediately
+- **Command line:** `defaults write com.titanplayer.app titanplayer.telemetry.consented -bool false`
+- **Immediate effect:** Opting out stops all data transmission immediately and calls `SentrySDK.close()`
 
 ## Network Uses
 

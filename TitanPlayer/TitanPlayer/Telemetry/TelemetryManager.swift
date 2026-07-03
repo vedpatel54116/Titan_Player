@@ -10,23 +10,22 @@ final class TelemetryManager: ObservableObject, TelemetryProviding {
     @AppStorage("titanplayer.telemetry.hasPrompted") private var hasPrompted = false
     
     private let dsn: String
+    private let sentry: SentrySDKProtocol
     
     var isOptedIn: Bool { consented }
     var needsConsentPrompt: Bool { !hasPrompted }
     
-    private init() {
-        self.dsn = Bundle.main.infoDictionary?["SentryDSN"] as? String ?? ""
+    init(
+        dsn: String = Bundle.main.infoDictionary?["SentryDSN"] as? String ?? "",
+        sentry: SentrySDKProtocol = LiveSentrySDK()
+    ) {
+        self.dsn = dsn
+        self.sentry = sentry
     }
     
     func initialize() {
         guard consented, !dsn.isEmpty else { return }
-        SentrySDK.start { options in
-            options.dsn = self.dsn
-            options.tracesSampleRate = 0.2
-            options.enableAutoSessionTracking = true
-            options.attachStacktrace = true
-            options.sendDefaultPii = false
-        }
+        sentry.start(dsn: dsn, tracesSampleRate: NSNumber(value: 0.2))
     }
     
     func record(_ event: TelemetryEvent) {
@@ -80,7 +79,7 @@ final class TelemetryManager: ObservableObject, TelemetryProviding {
             sentryEvent.level = .warning
         }
         
-        SentrySDK.capture(event: sentryEvent)
+        sentry.capture(event: sentryEvent)
     }
     
     func setConsent(_ granted: Bool) {
@@ -89,7 +88,7 @@ final class TelemetryManager: ObservableObject, TelemetryProviding {
         if granted {
             initialize()
         } else {
-            SentrySDK.close()
+            sentry.close()
         }
     }
 }

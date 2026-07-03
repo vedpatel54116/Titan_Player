@@ -104,7 +104,7 @@ final class BackendSwapTests: XCTestCase {
             sampleBuffer: nil
         )
 
-        var renderer: FrameRendering? = MetalRenderer()
+        var renderer: FrameRendering? = try MetalRenderer.make()
         try await renderer?.render(frame)
         XCTAssertTrue(renderer is MetalRenderer)
 
