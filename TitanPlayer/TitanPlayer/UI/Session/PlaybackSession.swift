@@ -302,13 +302,16 @@ final class PlaybackSession: ObservableObject {
             .assign(to: &$currentSubtitleBitmap)
     }
 
-    /// Wire the audio tap via direct dependency injection through
-    /// `AudioTapProvider` (no Mirror reflection). The closure feeds
-    /// decoded PCM frames to both the loudness meter and the spatial
-    /// audio engine.
+    /// Wire the audio tap via a typed `audioTapSource` accessor on the
+    /// engine. No Mirror reflection. The closure feeds decoded PCM frames
+    /// to both the loudness meter and the spatial audio engine.
     private func installAudioTap() {
         guard let meter = analysis?.audioMeter else { return }
-        engine.audioTap = { [weak self] frame in
+        guard var decoder = engine.audioTapSource else {
+            logger.warning("installAudioTap: no decoder available (audioTapSource is nil)")
+            return
+        }
+        decoder.audioTap = { [weak self] frame in
             Task { @MainActor in
                 meter.consume(frame: frame)
                 if let spatialEngine = self?.engine.activeSpatialAudioEngine,
