@@ -134,27 +134,6 @@ class MediaPipeline: ObservableObject {
         }
     }
     
-    func openStream(session: DASHStreamSession) async {
-        playState = .loading
-
-        do {
-            let info = try await session.open()
-            self.mediaInfo = info
-            timeObserver.duration = info.duration.seconds
-
-            self.demuxer = session
-
-            if let videoTrack = info.videoTracks.first {
-                decoder = FFmpegDecoder()
-                try decoder?.configure(for: videoTrack)
-            }
-
-            playState = .paused
-        } catch {
-            playState = .error(error.localizedDescription)
-        }
-    }
-    
     func play() {
         guard playState == .paused || playState == .idle else { return }
         playState = .playing

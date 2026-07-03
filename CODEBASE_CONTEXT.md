@@ -113,7 +113,7 @@
 
 ### Module: Streaming
 - Responsibility: HLS playback, bitrate observation, streaming cache (download/delete HLS assets), network monitor, stats publishing
-- Location (dir or primary file): Core/Streaming/ (StreamingManager.swift, HLS/, DASH/, Cache/, Network/)
+- Location (dir or primary file): Core/Streaming/ (StreamingManager.swift, HLS/, Cache/, Network/)
 - Public API:
   - `StreamingManager.load(url:)` — open HLS asset [StreamingManager.swift:79]
   - `StreamingManager.switchToQuality(_:)` — change variant bitrate [StreamingManager.swift]
@@ -278,7 +278,6 @@
 ## 11. Gotchas & Non-Obvious Behavior
 - `TimeObserver` in `MediaPipeline` uses `Date().timeIntervalSince(startTime)` for current time (wall clock), NOT demuxer PTS — drifts if pipeline stalls | [Core/Engine/TimeObserver.swift:30-31]
 - `FFmpegBridge` is a stub — all methods return zero/nil/default values. No actual FFmpeg C bindings are implemented; real FFmpeg integration relies on the `FFmpegBuild` package but the bridge acts as placeholder | [Core/Decoders/FFmpeg/FFmpegBridge.swift:7-37]
-- `DASHPlayer` returns `NotImplementedDASHPlayer` which throws `StreamingError.dashNotSupported(_:)` for every URL — DASH is not implemented in v1 | [Core/Streaming/DASH/DASHPlayerFactory.swift:7]
 - `AudioTap` wiring uses reflection (`Mirror`) to find a `MediaDecoding` instance inside the engine — fragile if internal property names change | [UI/Session/PlaybackSession.swift:306-317]
 - `MediaPipeline` creates two separate demuxer instances: one `FFmpegDemuxer` for probing, then a potentially different backend for actual playback — probe resources are thrown away | [Core/Engine/MediaPipeline.swift:35-37, 44-49]
 - `HDRMetadataProcessor` expects HDR metadata in `CMSampleBuffer` attachments dictionary under keys `"HDR10PlusMetadata"`, `"DolbyVisionProfile"`, `"DolbyVisionMetadata"`, `"HDR10Metadata"` — these keys must match whatever the decoder/probe layer populates | [HDRMetadataProcessor.swift:152-192]
@@ -299,7 +298,6 @@
 - **ACES** — Academy Color Encoding System, reference tone mapping curve used as fallback when no dynamic metadata | [Resources/Shaders/HDR.metal:28]
 - **RPU** — Reference Processing Unit, Dolby Vision's per-frame metadata structure | [HDRTypes.swift:147]
 - **HLS** — HTTP Live Streaming, Apple's adaptive streaming protocol (.m3u8) | [Core/Streaming/StreamingManager.swift:7-17]
-- **DASH** — Dynamic Adaptive Streaming over HTTP (.mpd) — NOT implemented in v1 | [Core/Streaming/DASH/NotImplementedDASHPlayer.swift:5-6]
 - **HRTF** — Head-Related Transfer Function, spatial audio filter for 3D sound positioning | [Core/Engine/Audio/AudioEngine.swift:30]
 - **BS.1770** — ITU standard for loudness metering (EBU R128), K-weighted pre-filter + true-peak | [Core/Analysis/LFSAudioMeter.swift:6]
 - **ICtCp** — Color space used by Dolby Vision Profile 8 IPT-PQ | [HDRTypes.swift:101]
