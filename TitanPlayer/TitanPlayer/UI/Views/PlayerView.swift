@@ -2,13 +2,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 import AppKit
 import Combine
+import os
 
 struct PlayerView: View {
     @EnvironmentObject var session: PlaybackSession
+    private let logger = Logger(subsystem: "com.titanplayer.app", category: "PlayerView")
     @State private var showControls = true
     @State private var cursorHidden = false
     @State private var showingFileImporter = false
     @State private var lastInteraction = Date.distantFuture
+    @State private var autoHideTask: Task<Void, Never>?
 
     var body: some View {
         ZStack {
@@ -18,7 +21,7 @@ struct PlayerView: View {
             if let analysis = session.analysis {
                 ColorPickerOverlay(
                     manager: analysis,
-                    viewSizeProvider: { .zero },  // unused; we resolve from GeometryReader
+                    viewSizeProvider: { .zero },
                     sourceSizeProvider: { analysis.latestTextureSize },
                     fitMode: session.effectiveFitMode
                 ) {
@@ -70,6 +73,8 @@ struct PlayerView: View {
                 .background(TouchBarProvider(session: session))
         }
         .accessibilityIdentifier("playerView.root")
+        .accessibilityLabel("Video Player")
+        .accessibilityHint("Double-tap to show controls")
         .onAppear { revealControls() }
         .onHover { hovering in
             if hovering { revealControls() }
@@ -81,6 +86,7 @@ struct PlayerView: View {
             if newstate == .playing {
                 revealControls()
             } else {
+                autoHideTask?.cancel()
                 withAnimation { showControls = true }
                 unhideCursor()
             }
@@ -110,18 +116,18 @@ struct PlayerView: View {
         lastInteraction = Date()
         withAnimation { showControls = true }
         if cursorHidden { unhideCursor() }
+        autoHideTask?.cancel()
         scheduleAutoHide()
     }
 
     private func scheduleAutoHide() {
-        let autoHideDelay: TimeInterval = 3
-        DispatchQueue.main.asyncAfter(deadline: .now() + autoHideDelay) { [weak session] in
-            guard let session, session.playState == .playing else { return }
+        autoHideTask?.cancel()
+        autoHideTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            if Task.isCancelled { return }
+            guard session.playState == .playing else { return }
             let elapsed = Date().timeIntervalSince(lastInteraction)
-            guard elapsed >= autoHideDelay else {
-                scheduleAutoHide()
-                return
-            }
+            guard elapsed >= 3 else { scheduleAutoHide(); return }
             withAnimation { showControls = false }
             hideCursor()
         }
@@ -136,7 +142,7 @@ struct PlayerView: View {
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             guard let data = item as? Data,
                   let url = URL(dataRepresentation: data, relativeTo: nil) else { return }
-            NSLog("[PlayerView] File dropped: %@", url.path)
+            logger.info("File dropped: \(url.path, privacy: .public)")
             Task { @MainActor in await session.openFile(url: url) }
         }
         return true
@@ -146,16 +152,17 @@ struct PlayerView: View {
         switch result {
         case .success(let urls):
             guard let url = urls.first else { return }
-            NSLog("[PlayerView] File selected via picker: %@", url.path)
+            logger.info("File selected via picker: \(url.path, privacy: .public)")
             Task { @MainActor in await session.openFile(url: url) }
         case .failure(let error):
-            NSLog("[PlayerView] File picker error: %@", error.localizedDescription)
+            logger.error("File picker error: \(error.localizedDescription, privacy: .public)")
         }
     }
 }
 
 struct VideoContentView: View {
     @EnvironmentObject var session: PlaybackSession
+    private let logger = Logger(subsystem: "com.titanplayer.app", category: "PlayerView")
     @State private var showingFileImporter = false
 
     var body: some View {
@@ -197,10 +204,10 @@ struct VideoContentView: View {
             switch result {
             case .success(let urls):
                 guard let url = urls.first else { return }
-                NSLog("[VideoContentView] File selected: %@", url.path)
+                logger.info("File selected: \(url.path, privacy: .public)")
                 Task { @MainActor in await session.openFile(url: url) }
             case .failure(let error):
-                NSLog("[VideoContentView] File picker error: %@", error.localizedDescription)
+                logger.error("File picker error: \(error.localizedDescription, privacy: .public)")
             }
         }
     }
@@ -210,6 +217,7 @@ struct VideoContentView: View {
             Image(systemName: "film")
                 .font(.system(size: 64))
                 .foregroundColor(.gray)
+                .accessibilityHidden(true)
             Text("Drop a file here to play").foregroundColor(.gray)
             Text("or use File > Open").font(.caption).foregroundColor(.gray)
             Button("Open File…") {
@@ -218,7 +226,11 @@ struct VideoContentView: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
             .padding(.top, 8)
+            .accessibilityLabel("Open file")
+            .accessibilityHint("Opens a file picker to choose a media file")
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No file loaded. Tap to open a file.")
     }
 }
 
@@ -242,8 +254,11 @@ struct SubtitleOverlay: View {
                         .shadow(color: .black, radius: 2)
                         .padding(.horizontal, 40)
                         .padding(.bottom, 60)
+                        .accessibilityLabel("Subtitle: \(event.text)")
                 }
             }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(events.first.map { "Subtitle: \($0.text)" } ?? "No subtitles")
         }
     }
 }

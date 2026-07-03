@@ -1,13 +1,14 @@
 # CODEBASE_CONTEXT.md
 
 ## 1. Project Identity
+- Last verified: 2026-07-03
 - One-sentence purpose: macOS video player with HDR rendering, spatial audio, adaptive performance management, and real-time video analysis tools.
 - Domain / industry: Media playback / video player
 - Target users: macOS power users interested in HDR playback, spatial audio, and video analysis (histogram/vectorscope/waveform)
 - Primary languages: Swift (100%), Metal Shading Language
 - Frameworks & major libraries: SwiftUI (AppKit/NSViewRepresentable), AVFoundation, Metal, AVFAudio, CoreAudio, Accelerate, NWPathMonitor, simd, Combine, FFmpeg (via external `FFmpegBuild` package providing Libavcodec/libavformat/libavutil/libswscale)
 - Build / package tooling: SwiftPM 5.9, XcodeGen (`project.yml`), Fastlane (`fastlane/`)
-- Repo root path / name: `/Users/vedpatelicloud.com/Documents/Titan Player` — TitanPlayer
+- Repo root path / name: `<local clone path>/TitanPlayer` — TitanPlayer
 
 ## 2. Repository Map
 - `Benchmarks/` — Standalone SwiftPM package for benchmarking (has own `Tests/` and `Sources/`) [Benchmarks/Package.swift]
@@ -212,7 +213,10 @@
 ## 8. Cross-Cutting Concerns
 - Authentication: N/A — no user authentication
 - Authorization: Sandbox entitlements restrict access: movies read-write, audio-input, network client/server | [TitanPlayer.entitlements]
-- Logging: `os.log` via `Logger(subsystem:category:)` — only in AudioEngine (`com.titanplayer.audio`) | [Core/Engine/Audio/AudioEngine.swift:9]
+- Logging: `os.log` via `Logger(subsystem:category:)` — used across multiple modules:
+  - `com.titanplayer.audio`: AudioEngine, FormatNegotiator, Diagnostics
+  - `com.titanplayer.app`: PlaybackSession (FileOpen)
+  - `com.titanplayer`: MediaPipeline, PlaybackEngine, MetalRenderer, MetalShaders, HDRMetadataProcessor, PixelBufferPool, SeekCoordinator, AudioDeviceMonitor, MetadataPassthrough, AdaptiveDecoderManager, ShortcutConflictChecker, SandboxBookmarkManager
 - Error handling: `PlaybackError` enum with `code` and `errorDescription`; caught in `PlaybackEngine.load()`, propagated via state machine | [Core/Engine/PlaybackError.swift:3, PlaybackEngine.swift:68-97]
   - `DecoderError` with severity (transient/persistent) | [Core/Decoders/VideoDecoder/Protocols/VideoDecoding.swift:7]
   - `RendererError` with `errorDescription` | [Core/Renderers/FrameRendering.swift:13]
