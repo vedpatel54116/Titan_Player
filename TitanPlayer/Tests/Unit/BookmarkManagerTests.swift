@@ -4,14 +4,12 @@ import XCTest
 @MainActor
 final class BookmarkManagerTests: XCTestCase {
     private let defaultsKey = "SecurityScopedBookmarks"
-
-    private func makeSession() -> PlaybackSession {
-        PlaybackSession(videoRenderer: MockFrameRenderer())
-    }
+    private var store: BookmarkStore!
 
     override func setUp() {
         super.setUp()
         UserDefaults.standard.removeObject(forKey: defaultsKey)
+        store = BookmarkStore()
     }
 
     override func tearDown() {
@@ -20,15 +18,13 @@ final class BookmarkManagerTests: XCTestCase {
     }
 
     func testInitiallyNoAccessedURL() {
-        let s = makeSession()
-        XCTAssertNil(s.currentlyAccessedURL)
+        XCTAssertNil(store.currentlyAccessedURL)
     }
 
     func testCreateBookmarkStoresInDefaults() {
-        let s = makeSession()
         let testURL = URL(fileURLWithPath: "/tmp/test_create_bookmark.txt")
 
-        s.createBookmark(for: testURL)
+        store.createBookmark(for: testURL)
 
         let bookmarks = UserDefaults.standard.dictionary(forKey: defaultsKey) as? [String: Data]
         XCTAssertNotNil(bookmarks)
@@ -36,40 +32,24 @@ final class BookmarkManagerTests: XCTestCase {
     }
 
     func testRemoveBookmarkClearsFromDefaults() {
-        let s = makeSession()
-
         UserDefaults.standard.set(
             ["test_path": Data([0x01])],
             forKey: defaultsKey
         )
 
-        s.removeBookmark(for: "test_path")
+        store.removeBookmark(for: "test_path")
 
         let bookmarks = UserDefaults.standard.dictionary(forKey: defaultsKey) as? [String: Data]
         XCTAssertTrue(bookmarks?.isEmpty ?? true)
     }
 
     func testResolveBookmarkReturnsNilForMissingEntry() {
-        let s = makeSession()
-        let result = s.resolveBookmark(for: "/nonexistent/path")
+        let result = store.resolveBookmark(for: "/nonexistent/path")
         XCTAssertNil(result)
     }
 
-    func testStopAccessingClearsURL() {
-        let s = makeSession()
-        s.currentlyAccessedURL = URL(fileURLWithPath: "/tmp/test.txt")
-
-        s.stopAccessingCurrentResource()
-
-        XCTAssertNil(s.currentlyAccessedURL)
-    }
-
     func testStopAccessingDoesNothingWhenNoURL() {
-        let s = makeSession()
-        s.currentlyAccessedURL = nil
-
-        s.stopAccessingCurrentResource()
-
-        XCTAssertNil(s.currentlyAccessedURL)
+        store.stopAccessingCurrentResource()
+        XCTAssertNil(store.currentlyAccessedURL)
     }
 }

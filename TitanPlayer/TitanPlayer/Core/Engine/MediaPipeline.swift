@@ -11,6 +11,9 @@ class MediaPipeline: ObservableObject {
     
     private var demuxer: MediaDemuxing?
     private var decoder: MediaDecoding?
+
+    /// Expose the active decoder for typed audio-tap wiring without Mirror reflection.
+    internal var activeDecoder: MediaDecoding? { decoder }
     private let timeObserver = TimeObserver()
     private let videoRenderer: VideoRenderer
     weak var synchronizationProvider: SynchronizationProvider?
@@ -25,7 +28,27 @@ class MediaPipeline: ObservableObject {
     var currentTime: Double { timeObserver.currentTime }
     var duration: Double { timeObserver.duration }
     var progress: Double { timeObserver.progress }
-    
+
+    /// Exposes the active demuxer backend for test assertions.
+    var demuxerBackendKind: String {
+        switch demuxer {
+        case is FFmpegDemuxer: return "FFmpeg"
+        case is AVFoundationDemuxer: return "AVFoundation"
+        default: return "none"
+        }
+    }
+
+    /// When `true`, MediaPipeline is the canonical audio owner and its audio tap
+    /// will deliver decoded PCM frames.  When `false` (the default), audio is
+    /// handled externally (e.g. by AVPlayer) and the audio tap is suppressed.
+    private(set) var audioRenderingEnabled: Bool = false
+
+    /// Enables or disables audio rendering on this pipeline.
+    /// Call from the owning engine when switching audio ownership.
+    func setAudioRenderingEnabled(_ enabled: Bool) {
+        audioRenderingEnabled = enabled
+    }
+
     func setPlaybackRate(_ rate: Float) {
         playbackRate = max(0.25, min(4.0, rate))
     }
@@ -281,7 +304,10 @@ class MediaPipeline: ObservableObject {
 
 extension MediaPipeline: AudioTappable, AudioTapProvider {
     var audioTap: AudioTap? {
-        get { decoder?.audioTap }
-        set { decoder?.audioTap = newValue }
+        get { audioRenderingEnabled ? decoder?.audioTap : nil }
+        set {
+            guard audioRenderingEnabled else { return }
+            decoder?.audioTap = newValue
+        }
     }
 }
