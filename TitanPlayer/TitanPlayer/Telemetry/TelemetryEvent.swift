@@ -41,7 +41,7 @@ enum PlaybackSource: String, Sendable {
 enum TelemetryHDRMode: String, Sendable {
     case hdr10
     case dolbyVision
-    case hlghdr
+    case hlg
 }
 
 enum TelemetryAudioFormat: String, Sendable {

@@ -1,3 +1,6 @@
+#ifndef ShaderTypes_h
+#define ShaderTypes_h
+
 #include <metal_stdlib>
 using namespace metal;
 
@@ -42,10 +45,4 @@ struct YCbCrUniforms {
     uint isHDR;
 };
 
-vertex VertexOut vertexShader(constant VertexIn *vertices [[buffer(0)]],
-                              uint vid [[vertex_id]]) {
-    VertexOut out;
-    out.position = float4(vertices[vid].position, 0.0, 1.0);
-    out.textureCoordinate = vertices[vid].textureCoordinate;
-    return out;
-}
+#endif /* ShaderTypes_h */

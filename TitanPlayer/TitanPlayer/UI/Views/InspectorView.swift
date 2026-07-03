@@ -35,28 +35,44 @@ struct InspectorView: View {
             } header: { Text("Subtitles").font(.headline) }
 
             Section {
-                Toggle(isOn: $session.analysis.waveformEnabled) { Text("Waveform") }
-                Toggle(isOn: $session.analysis.vectorscopeEnabled) { Text("Vectorscope") }
-                Toggle(isOn: $session.analysis.histogramEnabled) { Text("Histogram") }
-                Toggle(isOn: $session.analysis.audioMeteringEnabled) { Text("Audio Meters") }
-                if session.analysis.waveformEnabled {
-                    WaveformView(waveform: session.analysis.waveform)
-                }
-                if session.analysis.vectorscopeEnabled {
-                    VectorscopeView(vectorscope: session.analysis.vectorscope)
-                }
-                if session.analysis.histogramEnabled {
-                    HistogramView(histogram: session.analysis.histogram)
-                }
-                if let sample = session.analysis.colorPicker {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Last Picked").font(.headline)
-                        Text("#\(sample.hex8Bit)")
-                        Text("R:\(sample.r8) G:\(sample.g8) B:\(sample.b8)")
-                        Text(String(format: "H:%.0f°  S:%.2f  V:%.2f",
-                                    sample.hue, sample.saturation, sample.value))
+                if let analysis = session.analysis {
+                    Toggle(isOn: Binding(
+                        get: { analysis.waveformEnabled },
+                        set: { analysis.waveformEnabled = $0 }
+                    )) { Text("Waveform") }
+                    Toggle(isOn: Binding(
+                        get: { analysis.vectorscopeEnabled },
+                        set: { analysis.vectorscopeEnabled = $0 }
+                    )) { Text("Vectorscope") }
+                    Toggle(isOn: Binding(
+                        get: { analysis.histogramEnabled },
+                        set: { analysis.histogramEnabled = $0 }
+                    )) { Text("Histogram") }
+                    Toggle(isOn: Binding(
+                        get: { analysis.audioMeteringEnabled },
+                        set: { analysis.audioMeteringEnabled = $0 }
+                    )) { Text("Audio Meters") }
+                    if analysis.waveformEnabled {
+                        WaveformView(waveform: analysis.waveform)
                     }
-                    .font(.system(.caption, design: .monospaced))
+                    if analysis.vectorscopeEnabled {
+                        VectorscopeView(vectorscope: analysis.vectorscope)
+                    }
+                    if analysis.histogramEnabled {
+                        HistogramView(histogram: analysis.histogram)
+                    }
+                    if let sample = analysis.colorPicker {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Last Picked").font(.headline)
+                            Text("#\(sample.hex8Bit)")
+                            Text("R:\(sample.r8) G:\(sample.g8) B:\(sample.b8)")
+                            Text(String(format: "H:%.0f°  S:%.2f  V:%.2f",
+                                        sample.hue, sample.saturation, sample.value))
+                        }
+                        .font(.system(.caption, design: .monospaced))
+                    }
+                } else {
+                    Text("GPU unavailable").foregroundColor(.secondary)
                 }
             } header: { Text("Analyzers").font(.headline) }
 

@@ -56,7 +56,6 @@ final class SubsystemAdapterTests: XCTestCase {
     }
 
     func test_streaming_adapter_forwards_bitrate_action() {
-        let sink = MockStreamingManagerCapSink()
         let adapter = StreamingAdapter(target: StreamingManager.makeDefault())
         // Re-target through a dedicated adapter variant that uses a closure —
         // StreamingManager's seam is verified separately via SubsystemSeamTests.

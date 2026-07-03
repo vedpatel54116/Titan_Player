@@ -72,13 +72,13 @@ final class PlayerActionDispatcher {
         case .resetPlaybackRate:
             session.setPlaybackRate(1.0)
         case .toggleWaveform:
-            session.analysis.waveformEnabled.toggle()
+            session.analysis?.waveformEnabled.toggle()
         case .toggleVectorscope:
-            session.analysis.vectorscopeEnabled.toggle()
+            session.analysis?.vectorscopeEnabled.toggle()
         case .toggleHistogram:
-            session.analysis.histogramEnabled.toggle()
+            session.analysis?.histogramEnabled.toggle()
         case .toggleAudioMeters:
-            session.analysis.audioMeteringEnabled.toggle()
+            session.analysis?.audioMeteringEnabled.toggle()
         }
     }
 

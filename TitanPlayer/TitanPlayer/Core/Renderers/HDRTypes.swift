@@ -53,6 +53,32 @@ struct ICCProfile: Equatable {
             SIMD3<Float>(0.0, 0.0, 1.0)
         )
     )
+    
+    static let displayP3 = ICCProfile(
+        gamut: .displayP3,
+        matrix: simd_float3x3(
+            SIMD3<Float>(0.8224622, 0.1775380, 0.0000000),
+            SIMD3<Float>(0.0331942, 0.9668058, 0.0000000),
+            SIMD3<Float>(0.0170813, 0.0723974, 0.9105213)
+        )
+    )
+    
+    static let bt2020 = ICCProfile(
+        gamut: .bt2020,
+        matrix: simd_float3x3(
+            SIMD3<Float>(1.7166512, -0.3556708, -0.2533663),
+            SIMD3<Float>(-0.6666844, 1.6164812, 0.0157685),
+            SIMD3<Float>(0.0176399, -0.0427706, 0.9421031)
+        )
+    )
+    
+    static func profile(for gamut: ColorGamut) -> ICCProfile {
+        switch gamut {
+        case .bt2020: return .bt2020
+        case .displayP3: return .displayP3
+        case .srgb: return .sRGB
+        }
+    }
 }
 
 // MARK: - HDR10+ Dynamic Metadata

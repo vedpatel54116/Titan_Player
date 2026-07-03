@@ -9,6 +9,7 @@ enum DisplayChangeEvent {
     case primaryChanged(ExternalDisplayConfig)
 }
 
+@MainActor
 protocol ScreenDetecting: AnyObject {
     func detect(screen: NSScreen) -> ExternalDisplayConfig?
 }

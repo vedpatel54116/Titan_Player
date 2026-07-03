@@ -10,9 +10,9 @@ final class AnalysisPipelineIntegrationTests: XCTestCase {
         XCTAssertNotNil(session.analysis)
         XCTAssertNotNil(session.frameStore)
         // The analysis manager should not be collecting when nothing is enabled.
-        XCTAssertFalse(session.analysis.histogramEnabled)
-        XCTAssertFalse(session.analysis.waveformEnabled)
-        XCTAssertFalse(session.analysis.vectorscopeEnabled)
-        XCTAssertFalse(session.analysis.audioMeteringEnabled)
+        XCTAssertFalse(session.analysis?.histogramEnabled ?? true)
+        XCTAssertFalse(session.analysis?.waveformEnabled ?? true)
+        XCTAssertFalse(session.analysis?.vectorscopeEnabled ?? true)
+        XCTAssertFalse(session.analysis?.audioMeteringEnabled ?? true)
     }
 }

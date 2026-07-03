@@ -19,6 +19,7 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     @Published var audioDelay: TimeInterval = 0
     var audioCurrentTime: TimeInterval { currentTime }
     @Published var lastError: PlaybackError?
+    @Published var mediaPipelineError: Error?
     @Published var spatialAudioEnabled: Bool = true
     @Published var mediaInfo: MediaInfo? = nil
     @Published var compatibilityMode: Bool = false
@@ -30,6 +31,8 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     private var audioEngine = AVAudioEngine()
     private let audioClock = AudioClock()
     private var cancellables = Set<AnyCancellable>()
+    private var itemStatusCancellable: AnyCancellable?
+    private var currentLoadURL: URL?
     private var notificationObservers: [Any] = []
     private var spatialAudioEngine: AudioEngine?
 
@@ -41,7 +44,7 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
 
     private let performanceMonitor: PerformanceMonitor
     private let performanceProbe: EnginePerformanceProbe
-    private let adaptiveDecoderManager = AdaptiveDecoderManager()
+    let adaptiveDecoderManager = AdaptiveDecoderManager()
     private let decoderLogger = Logger(subsystem: "com.titanplayer", category: "PlaybackEngine")
 
     var cpuUsage: Double { performanceProbe.cpuUsage }
@@ -71,7 +74,9 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     func load(url: URL) async throws {
         state = .loading
         lastError = nil
+        mediaPipelineError = nil
         self.compatibilityMode = false
+        self.itemStatusCancellable = nil
         decoderLogger.info("load(url:) called for: \(url.path, privacy: .public)")
 
         do {
@@ -109,6 +114,31 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
                 decoderLogger.info("Duration loaded: \(self.duration, privacy: .public) seconds")
 
                 decoderLogger.info("Setting AVPlayerItem on AVPlayer...")
+                self.currentLoadURL = url
+                self.itemStatusCancellable = item.publisher(for: \.status)
+                    .removeDuplicates()
+                    .sink { [weak self] status in
+                        guard let self, status == .failed else { return }
+                        let error = item.error as NSError?
+                        let osStatus = OSStatus(error?.code ?? -1)
+                        self.decoderLogger.error("""
+                        AVPlayerItem.status became .failed for \(url.path, privacy: .public):
+                          NSError: \(error?.description ?? "nil", privacy: .public)
+                          UserInfo: \(error?.userInfo.description ?? "nil", privacy: .public)
+                          OSStatus: \(osStatus)
+                        """)
+                        self.state = .error("Cannot Open: OSStatus \(osStatus)")
+                        self.lastError = .assetLoadFailedWithStatus(
+                            osStatus,
+                            error ?? NSError(domain: "PlaybackEngine", code: -1)
+                        )
+                        TelemetryManager.shared.record(.playbackFailed(
+                            codec: "unknown",
+                            resolution: "unknown",
+                            errorCode: "OSStatus \(osStatus)",
+                            source: url.pathExtension.lowercased() == "mpd" ? .dash : .local
+                        ))
+                    }
                 self.player.replaceCurrentItem(with: item)
                 decoderLogger.info("AVPlayerItem set successfully")
 
@@ -119,12 +149,14 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
                     decoderLogger.info("MediaPipeline file opened successfully")
                 } catch {
                     decoderLogger.warning("MediaPipeline failed (\(error.localizedDescription, privacy: .public)), falling back to AVPlayer compatibility mode")
+                    self.mediaPipelineError = error
                     self.mediaInfo = nil
                     self.compatibilityMode = true
                     TelemetryManager.shared.record(.compatibilityModeActivated(
                         reason: error.localizedDescription,
                         source: url.pathExtension.lowercased() == "mpd" ? .dash : .local
                     ))
+                    throw error
                 }
 
                 if let decoderName = await adaptiveDecoderManager.selectedDecoderName {
@@ -149,7 +181,7 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     }
 
     func play() {
-        guard state == .ready || state == .paused || state == .ended else { return }
+        guard state.canTransition(to: .playing) else { return }
         audioClock.rate = playbackRate
         audioClock.start()
         player.playImmediately(atRate: playbackRate)
@@ -161,7 +193,7 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     }
 
     func pause() {
-        guard state == .playing else { return }
+        guard state.canTransition(to: .paused) else { return }
         player.pause()
         audioClock.pause()
         mediaPipeline?.pause()
@@ -175,13 +207,15 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         spatialAudioEngine?.stop()
         mediaPipeline?.stop()
         mediaInfo = nil
+        itemStatusCancellable = nil
+        currentLoadURL = nil
         state = .idle
         currentTime = 0
         duration = 0
     }
 
     func seek(to time: TimeInterval) async {
-        guard state == .ready || state == .playing || state == .paused || state == .ended else { return }
+        guard state.canTransition(to: .seeking) else { return }
         let previousState = state
         state = .seeking
         let targetTime = CMTime(seconds: time, preferredTimescale: 600)
@@ -221,8 +255,10 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         spatialAudioEngine?.spatialAudioEnabled = enabled
         if enabled {
             spatialAudioEngine?.enableSpatialAudio()
+            player.volume = 0
         } else {
             spatialAudioEngine?.disableSpatialAudio()
+            player.volume = 1
         }
     }
 

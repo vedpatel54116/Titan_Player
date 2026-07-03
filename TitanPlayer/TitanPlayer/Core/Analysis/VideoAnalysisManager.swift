@@ -7,12 +7,16 @@ import Dispatch
 /// Main facade for the video-analysis toolset. Owns one `AnalysisGPURunner`
 /// and one `LFSAudioMeter`, observes `FrameStore` updates, and publishes
 /// derived data on the main actor.
+///
+/// **GPU-savvy**: Compute shaders only dispatch when at least one analysis
+/// mode is enabled. When all modes are off the manager unsubscribes from the
+/// frame store, burning zero GPU cycles per frame.
 @MainActor
 final class VideoAnalysisManager: ObservableObject {
-    @Published var waveformEnabled: Bool = false
-    @Published var vectorscopeEnabled: Bool = false
-    @Published var histogramEnabled: Bool = false
-    @Published var audioMeteringEnabled: Bool = false
+    @Published var waveformEnabled: Bool = false { didSet { resubscribeIfNeeded() } }
+    @Published var vectorscopeEnabled: Bool = false { didSet { resubscribeIfNeeded() } }
+    @Published var histogramEnabled: Bool = false { didSet { resubscribeIfNeeded() } }
+    @Published var audioMeteringEnabled: Bool = false { didSet { resubscribeIfNeeded() } }
 
     @Published private(set) var histogram: HistogramData?
     @Published private(set) var waveform: WaveformData?
@@ -44,11 +48,37 @@ final class VideoAnalysisManager: ObservableObject {
 
     func attach(frameStore: FrameStore) {
         self.frameStore = frameStore
+        subscribe()
+    }
+
+    /// Subscribe to frame updates. Called on init and when any mode toggles on.
+    private func subscribe() {
+        guard frameIDSink == nil, let frameStore else { return }
         frameIDSink = frameStore.frameIDPublisher
             .receive(on: gpuQueue)
             .sink { [weak self] _ in
                 self?.handleFrameTick()
             }
+    }
+
+    /// Unsubscribe from frame updates to save GPU when no panel is open.
+    private func unsubscribe() {
+        frameIDSink?.cancel()
+        frameIDSink = nil
+    }
+
+    /// Tear down and re-establish the frame-store subscription based on
+    /// whether any analysis mode is currently active.
+    private func resubscribeIfNeeded() {
+        if anyModeEnabled {
+            if frameIDSink == nil { subscribe() }
+        } else {
+            unsubscribe()
+        }
+    }
+
+    private var anyModeEnabled: Bool {
+        histogramEnabled || vectorscopeEnabled || waveformEnabled || audioMeteringEnabled
     }
 
     private func handleFrameTick() {

@@ -73,8 +73,11 @@ class MediaPipeline: ObservableObject {
 
                 if let videoTrack = info.videoTracks.first, let manager = adaptiveManager {
                     try await manager.configure(for: videoTrack)
+                    guard let activeDecoder = manager.activeDecoder else {
+                        throw MediaError(code: .decodingFailed, message: "AdaptiveDecoderManager has no active decoder after configure()")
+                    }
                     demuxer = probeDemuxer
-                    decoder = VideoDecodingAdapter(decoder: manager.activeDecoder!)
+                    decoder = VideoDecodingAdapter(decoder: activeDecoder)
                     logger.info("Adaptive decoder configured for video track")
                 } else {
                     demuxer = probeDemuxer
@@ -257,8 +260,8 @@ class MediaPipeline: ObservableObject {
         self.videoRenderer = videoRenderer
     }
 
-    private static let avFoundationDirectExtensions: Set<String> = ["mp4", "mov", "m4v", "mkv"]
-    private static let ffmpegPreferredExtensions: Set<String> = ["flv"]
+    private static let avFoundationDirectExtensions: Set<String> = ["mp4", "mov", "m4v"]
+    private static let ffmpegPreferredExtensions: Set<String> = ["flv", "mkv"]
 
     /// Standard container formats that AVFoundation handles reliably — bypass FFmpeg entirely.
     static func shouldUseAVFoundationDirectly(for ext: String) -> Bool {

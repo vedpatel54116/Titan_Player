@@ -12,6 +12,7 @@ protocol StreamCacheLifecycleDelegate: AnyObject {
 }
 
 /// Identifiable protocol conformance so the cache can be substituted in tests.
+@MainActor
 protocol StreamingCacheProtocol: AnyObject {
     var availableDownloads: [DownloadedAssetInfo] { get }
     var activeDownloads: [ActiveDownload] { get }
@@ -157,7 +158,8 @@ final class ProductionCacheDelegate: NSObject, StreamCacheLifecycleDelegate, AVA
                     aggregateAssetDownloadTask task: AVAggregateAssetDownloadTask,
                     didLoad timeRange: CMTimeRange,
                     totalTimeRangesLoaded loadedTimeRanges: [NSValue],
-                    timeRangeExpectedToLoad expected: CMTimeRange) {
+                    timeRangeExpectedToLoad expected: CMTimeRange,
+                    for mediaSelection: AVMediaSelection) {
         let loadedFraction: Double
         if expected.duration.seconds > 0 {
             let loaded = loadedTimeRanges.reduce(0.0) { acc, ns in
@@ -175,9 +177,8 @@ final class ProductionCacheDelegate: NSObject, StreamCacheLifecycleDelegate, AVA
         }
     }
 
-    func urlSession(_ session: URLSession,
-                    aggregateAssetDownloadTask task: AVAggregateAssetDownloadTask,
-                    didCompleteWith error: Error?) {
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let task = task as? AVAggregateAssetDownloadTask else { return }
         let id = String(task.taskIdentifier)
         Task { @MainActor [weak cache] in
             guard let cache else { return }

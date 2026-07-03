@@ -41,8 +41,11 @@ final class TouchBarHostView: NSView {
             self.session = session
             let side = DispatcherSideEffects(
                 toggleFullscreen: { NSApp.keyWindow?.toggleFullScreen(nil) },
-                toggleMiniPlayer: {
-                    SessionLocator.MiniWindowController.shared.toggle { _ in MiniPlayerView() }
+                toggleMiniPlayer: { [session] in
+                    SessionLocator.MiniWindowController.shared.toggle(
+                        using: { _ in MiniPlayerView() },
+                        session: session
+                    )
                 },
                 newLibraryWindow: { TitanCommands.openLibraryPanel() },
                 openFile:         { TitanCommands.openFileUsingPanel(session: session) }

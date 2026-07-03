@@ -1,5 +1,6 @@
 #include <metal_stdlib>
 using namespace metal;
+#include "ShaderTypes.h"
 
 fragment float4 subtitleFragment(
     VertexOut in [[stage_in]],

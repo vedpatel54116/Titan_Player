@@ -34,9 +34,26 @@ ui-tests:
 compat-smoke:
 	cd $(SPM_DIR) && swift test --filter Hardware --parallel
 
+# Metal shader pre-compilation — eliminates first-launch runtime MSL compilation stutter.
+# Run once (or whenever .metal files change) before building:
+#   make precompile-shaders
+SHADERS_DIR := TitanPlayer/TitanPlayer/Resources/Shaders
+SHADERS_OUTPUT_DIR := TitanPlayer/TitanPlayer/Resources
+METAL_FILES := $(wildcard $(SHADERS_DIR)/*.metal)
+AIR_FILES := $(patsubst $(SHADERS_DIR)/%.metal, $(SHADERS_DIR)/%.air, $(METAL_FILES))
+
+$(SHADERS_DIR)/%.air: $(SHADERS_DIR)/%.metal
+	xcrun -sdk macosx metal -c $< -o $@
+
+precompile-shaders: $(AIR_FILES)
+	xcrun -sdk macosx metallib $(SHADERS_DIR)/*.air -o $(SHADERS_OUTPUT_DIR)/default.metallib
+	rm -f $(SHADERS_DIR)/*.air
+	@echo "Pre-compiled default.metallib written to $(SHADERS_OUTPUT_DIR)"
+
 clean:
 	cd $(SPM_DIR) && swift package clean
 	rm -rf $(SPM_DIR)/.build
+	rm -f $(SHADERS_DIR)/*.air
 
 # Run every textual lint for App Store prep artifacts.
 # Works on CommandLineTools-only machines; no Xcode required.

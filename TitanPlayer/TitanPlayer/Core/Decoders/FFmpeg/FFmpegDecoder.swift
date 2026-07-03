@@ -10,13 +10,10 @@ class FFmpegDecoder: MediaDecoding {
     }
     
     func decode(_ packet: MediaPacket) async throws -> MediaFrame {
-        // In production, use FFmpeg to decode the packet
-        // For now, return a placeholder frame
-        
         var pixelBuffer: CVPixelBuffer?
         let attrs = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA] as CFDictionary
         
-        CVPixelBufferCreate(
+        let status = CVPixelBufferCreate(
             kCFAllocatorDefault,
             1920, 1080,
             kCVPixelFormatType_32BGRA,
@@ -24,8 +21,12 @@ class FFmpegDecoder: MediaDecoding {
             &pixelBuffer
         )
         
+        guard status == kCVReturnSuccess, let pixelBuffer else {
+            throw MediaError(code: .decodingFailed, message: "FFmpegDecoder: CVPixelBufferCreate failed (\(status))")
+        }
+        
         return .video(VideoFrame(
-            pixelBuffer: pixelBuffer!,
+            pixelBuffer: pixelBuffer,
             timestamp: packet.timestamp,
             duration: packet.duration,
             colorSpace: .sRGB,

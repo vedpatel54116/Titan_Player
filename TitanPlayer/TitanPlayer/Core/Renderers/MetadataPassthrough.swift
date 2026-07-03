@@ -2,6 +2,7 @@ import Foundation
 import CoreGraphics
 import CoreMedia
 import AppKit
+import os
 
 class MetadataPassthroughManager {
     
@@ -167,15 +168,16 @@ class MetadataPassthroughManager {
     }
     
     private func sendMetadataToDisplay(_ metadata: PassthroughMetadata, displayID: CGDirectDisplayID) {
-        print("Passthrough metadata to display \(displayID):")
+        let logger = os.Logger(subsystem: "com.titanplayer", category: "MetadataPassthrough")
+        logger.info("Passthrough metadata to display \(displayID):")
         if let hdr10 = metadata.hdr10Metadata {
-            print("  HDR10: maxLum=\(hdr10.maxDisplayLuminance), MaxCLL=\(hdr10.maxContentLightLevel)")
+            logger.info("  HDR10: maxLum=\(hdr10.maxDisplayLuminance), MaxCLL=\(hdr10.maxContentLightLevel)")
         }
         if let hdr10Plus = metadata.hdr10PlusMetadata {
-            print("  HDR10+: kneePoint=\(hdr10Plus.kneePointX), anchors=\(hdr10Plus.numBezierCurveAnchors)")
+            logger.info("  HDR10+: kneePoint=\(hdr10Plus.kneePointX), anchors=\(hdr10Plus.numBezierCurveAnchors)")
         }
         if let dv = metadata.dolbyVisionMetadata {
-            print("  DolbyVision: profile=\(dv.profile.rawValue)")
+            logger.info("  DolbyVision: profile=\(dv.profile.rawValue)")
         }
     }
     

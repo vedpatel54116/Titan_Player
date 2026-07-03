@@ -11,6 +11,7 @@ struct PlaybackSample: Sendable, Equatable {
     let powerMode: PowerMode
     let codecName: String
     let cpuUsage: Double
+    let batteryLevel: Double
 
     init(
         timestamp: Date,
@@ -21,7 +22,8 @@ struct PlaybackSample: Sendable, Equatable {
         thermalState: SystemState.ThermalState,
         powerMode: PowerMode,
         codecName: String,
-        cpuUsage: Double = 0
+        cpuUsage: Double = 0,
+        batteryLevel: Double = 1.0
     ) {
         self.timestamp = timestamp
         self.decoderName = decoderName
@@ -32,6 +34,7 @@ struct PlaybackSample: Sendable, Equatable {
         self.powerMode = powerMode
         self.codecName = codecName
         self.cpuUsage = cpuUsage
+        self.batteryLevel = batteryLevel
     }
 }
 

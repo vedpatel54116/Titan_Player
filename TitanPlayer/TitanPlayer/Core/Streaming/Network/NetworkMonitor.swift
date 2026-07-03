@@ -92,6 +92,7 @@ final class NetworkMonitor: ObservableObject {
     }
 }
 
+@MainActor
 protocol NetworkMonitorProtocol: AnyObject {
     var reach: Reach { get }
     var thermalState: ProcessInfo.ThermalState { get }

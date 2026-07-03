@@ -1,12 +1,11 @@
 import Foundation
-import AVFAudio
+@preconcurrency import AVFAudio
 import Accelerate
 import Dispatch
 
 /// BS.1770-4 / EBU R128 loudness + true-peak meter. Algorithm verified against
 /// libebur128 (canonical reference at https://github.com/jiixyj/libebur128).
-@MainActor
-final class LFSAudioMeter {
+final class LFSAudioMeter: @unchecked Sendable {
     /// 5-tap biquad, Direct Form II (canonical): w[n] = x[n] − a1·v1...a4·v4;
     /// y[n] = b0·w + b1·v1 + b2·v2 + b3·v3 + b4·v4.
     private struct Biquad5 {
@@ -155,7 +154,7 @@ final class LFSAudioMeter {
     private var truePeakHold: (value: Float, until: Date) =
         (-120.0, Date(timeIntervalSince1970: 0))
 
-    private(set) var metering: AudioMeteringData = .zero
+    @MainActor private(set) var metering: AudioMeteringData = .zero
 
     init(sampleRate: Double, channelCount: Int) {
         self.sampleRate = sampleRate
@@ -185,7 +184,7 @@ final class LFSAudioMeter {
         integratedBlocks.removeAll()
         if var interp = interpolator { interp.zi = 0; interpolator = interp }
         truePeakHold = (-120.0, Date(timeIntervalSince1970: 0))
-        metering = .zero
+        Task { @MainActor in self.metering = .zero }
     }
 
     func consume(buffer: AVAudioPCMBuffer) {
@@ -308,8 +307,8 @@ final class LFSAudioMeter {
             }
         }
 
-        let snapshot = metering
         Task { @MainActor in
+            let snapshot = self.metering
             // Preserve true-peak fields from the most recent true-peak update.
             self.metering = AudioMeteringData(
                 momentaryLUFS: momentaryLUFS,
@@ -332,9 +331,9 @@ final class LFSAudioMeter {
             let release = Float(min(elapsed, 5.0)) * 0.5
             truePeakHold.value -= release
         }
-        let snapshot = metering
         let hold = truePeakHold
         Task { @MainActor in
+            let snapshot = self.metering
             self.metering = AudioMeteringData(
                 momentaryLUFS: snapshot.momentaryLUFS,
                 shortTermLUFS: snapshot.shortTermLUFS,

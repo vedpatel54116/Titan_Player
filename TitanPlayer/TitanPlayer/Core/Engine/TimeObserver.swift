@@ -10,19 +10,11 @@ class TimeObserver: ObservableObject {
     private var driftLogStartTime: Date?
     private let driftLogDuration: TimeInterval = 5.0
     
-    private var timer: Timer?
-    private var startTime: Date?
-    
     func startObserving() {
-        startTime = Date()
-        timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            self?.updateTime()
-        }
+        driftLogStartTime = nil
     }
-    
+
     func stopObserving() {
-        timer?.invalidate()
-        timer = nil
     }
     
     func update(to timestamp: CMTime) {
@@ -39,7 +31,6 @@ class TimeObserver: ObservableObject {
         let drift = videoTime - audioTime
         audioVideoDrift = drift
         
-        // Log drift for first 5 seconds
         if driftLogStartTime == nil {
             driftLogStartTime = Date()
         }
@@ -50,12 +41,6 @@ class TimeObserver: ObservableObject {
         }
     }
     
-    private func updateTime() {
-        guard let startTime = startTime else { return }
-        currentTime = Date().timeIntervalSince(startTime)
-        updateProgress()
-    }
-    
     private func updateProgress() {
         guard duration > 0 else { return }
         progress = currentTime / duration
@@ -63,6 +48,5 @@ class TimeObserver: ObservableObject {
     
     func reset() {
         currentTime = 0
-        startTime = Date()
     }
 }

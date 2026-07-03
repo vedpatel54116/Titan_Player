@@ -1,6 +1,7 @@
 import Foundation
 import CoreMedia
 import CoreVideo
+import VideoToolbox
 
 // MARK: - Video Codec
 
@@ -48,12 +49,26 @@ struct DecoderCapabilities: Sendable {
     let maxConcurrentDecodes: Int
     
     static let `default` = DecoderCapabilities(
-        supportedCodecs: Set(VideoCodec.allCases),
+        supportedCodecs: Self.querySupportedCodecs(),
         maxResolution: CGSize(width: 1920, height: 1080),
-        supportsHDR: false,
-        supportsHardwareAcceleration: false,
+        supportsHDR: true,
+        supportsHardwareAcceleration: MTLCreateSystemDefaultDevice() != nil,
         maxConcurrentDecodes: 1
     )
+
+    private static func querySupportedCodecs() -> Set<VideoCodec> {
+        var codecs: Set<VideoCodec> = [.h264]
+        if VTIsHardwareDecodeSupported(kCMVideoCodecType_HEVC) {
+            codecs.insert(.hevc)
+        }
+        if #available(macOS 13.0, *) {
+            if VTIsHardwareDecodeSupported(kCMVideoCodecType_AV1) {
+                codecs.insert(.av1)
+            }
+        }
+        codecs.insert(.vp9)
+        return codecs
+    }
     
     init(supportedCodecs: Set<VideoCodec>,
          maxResolution: CGSize,

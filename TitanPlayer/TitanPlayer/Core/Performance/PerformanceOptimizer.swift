@@ -14,9 +14,10 @@ final class PerformanceOptimizer: ObservableObject {
     var historyCount: Int { history.count }
 
     private let monitor: any PerformanceMonitorProtocol
+    private nonisolated let concreteMonitor: PerformanceMonitor?
     private let networkMonitor: any NetworkMonitorProtocol
     private let history: PlaybackHistory
-    private let adapters: [any AdaptiveSubsystemAdapting]
+    private var adapters: [any AdaptiveSubsystemAdapting]
     private let predictor = ResourcePredictor()
     private let controller = AdaptiveQualityController()
 
@@ -28,19 +29,33 @@ final class PerformanceOptimizer: ObservableObject {
 
     init(
         monitor: any PerformanceMonitorProtocol,
+        concreteMonitor: PerformanceMonitor? = nil,
         networkMonitor: any NetworkMonitorProtocol,
         history: PlaybackHistory,
-        adapters: [any AdaptiveSubsystemAdapting]
+        adapters: [any AdaptiveSubsystemAdapting] = []
     ) {
         self.monitor = monitor
+        self.concreteMonitor = concreteMonitor
         self.networkMonitor = networkMonitor
         self.history = history
         self.adapters = adapters
         self.thermalState = networkMonitor.thermalState
     }
 
+    func registerAdapter(_ adapter: any AdaptiveSubsystemAdapting) {
+        adapters.append(adapter)
+    }
+
+    func registerAdapters(_ newAdapters: [any AdaptiveSubsystemAdapting]) {
+        adapters.append(contentsOf: newAdapters)
+    }
+
     func observe(settings: CurrentPlaybackSettings?) {
         lastSettings = settings
+    }
+
+    nonisolated func startPerformanceMonitor() {
+        concreteMonitor?.start()
     }
 
     func forcePowerMode(_ choice: PowerMode) {
@@ -72,7 +87,8 @@ final class PerformanceOptimizer: ObservableObject {
             thermalState: systemState.thermalState,
             powerMode: mode,
             codecName: "unknown",
-            cpuUsage: systemState.cpuUsage
+            cpuUsage: systemState.cpuUsage,
+            batteryLevel: systemState.batteryLevel
         )
         history.append(sample)
 
@@ -120,6 +136,7 @@ final class PerformanceOptimizer: ObservableObject {
         let net = NetworkMonitor()
         return PerformanceOptimizer(
             monitor: monitor,
+            concreteMonitor: monitor,
             networkMonitor: net,
             history: PlaybackHistory(),
             adapters: []

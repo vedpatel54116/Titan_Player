@@ -38,8 +38,8 @@ struct ControlBar: View {
                     Spacer()
                     volumeCluster
                     routeCluster
-                    if session.analysis.audioMeteringEnabled {
-                        AudioMeterBar(data: session.analysis.audioMeter.metering)
+                    if session.analysis?.audioMeteringEnabled == true {
+                        AudioMeterBar(data: session.analysis!.audioMeter.metering)
                     }
                     if session.isHDRContent { hdrCluster }
                     if !session.subtitles.isEmpty { subtitleCluster }

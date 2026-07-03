@@ -1,6 +1,7 @@
 import AppKit
 @testable import TitanPlayer
 
+@MainActor
 final class MockMetalRendererDelegate: MetalRendererDelegate {
     private(set) var detectedModes: [HDRMode] = []
     private(set) var capabilitiesUpdates: [DisplayCapabilities] = []

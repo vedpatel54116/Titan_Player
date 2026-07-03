@@ -38,6 +38,11 @@ struct DecoderScore: Sendable {
 
 struct DecoderSelector {
 
+    // MARK: - Decoder Caches
+
+    private var hwDecoderCache: [String: VideoToolboxDecoder] = [:]
+    private var swDecoderCache: [String: FFmpegSoftwareDecoder] = [:]
+
     // MARK: - Selection Logic
 
     func selectDecoder(for track: VideoTrackInfo,
@@ -56,6 +61,33 @@ struct DecoderSelector {
         }
 
         return DecoderSelection(decoder: best.decoder, reason: best.score.reasons.first ?? .fallback)
+    }
+    
+    // MARK: - Cached Decoder Access
+
+    mutating func cachedDecoder(for track: VideoTrackInfo, preferHardware: Bool) -> VideoDecoding {
+        let key = "\(track.codec)_\(track.width)x\(track.height)"
+
+        if preferHardware {
+            if let cached = hwDecoderCache[key] {
+                return cached
+            }
+            let decoder = VideoToolboxDecoder()
+            hwDecoderCache[key] = decoder
+            return decoder
+        } else {
+            if let cached = swDecoderCache[key] {
+                return cached
+            }
+            let decoder = FFmpegSoftwareDecoder()
+            swDecoderCache[key] = decoder
+            return decoder
+        }
+    }
+
+    mutating func invalidateCaches() {
+        hwDecoderCache.removeAll()
+        swDecoderCache.removeAll()
     }
     
     // MARK: - Switch Check
@@ -168,6 +200,10 @@ struct DecoderSelector {
     }
     
     private func findSoftwareDecoder(from decoders: [VideoDecoding]) -> VideoDecoding? {
+        // Reuse an existing software decoder if available
+        if let existing = decoders.first(where: { $0 is FFmpegSoftwareDecoder }) {
+            return existing
+        }
         return FFmpegSoftwareDecoder()
     }
 }

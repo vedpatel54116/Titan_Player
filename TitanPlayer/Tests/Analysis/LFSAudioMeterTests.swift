@@ -50,6 +50,6 @@ final class LFSAudioMeterTests: XCTestCase {
         let exp = expectation(description: "publish")
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { exp.fulfill() }
         wait(for: [exp], timeout: 2.0)
-        XCTAssertEqual(meter.metering.momentaryLUFS ?? 0, -0.691, accuracy: 1.0)
+        XCTAssertEqual(meter.metering.momentaryLUFS, -0.691, accuracy: 1.0)
     }
 }

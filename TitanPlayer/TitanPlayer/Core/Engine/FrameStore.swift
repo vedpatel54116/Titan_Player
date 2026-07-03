@@ -14,6 +14,7 @@ final class FrameStore {
 
     func update(_ texture: MTLTexture) {
         self.latestTexture = texture
+        // UInt64 wraps at ~5.8M years at 60fps — safe in practice
         frameID &+= 1
         idSubject.send(frameID)
     }

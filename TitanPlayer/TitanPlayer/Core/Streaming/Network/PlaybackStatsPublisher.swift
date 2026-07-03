@@ -2,6 +2,7 @@ import Foundation
 import AVFoundation
 import Combine
 
+@MainActor
 protocol AccessLogProviding {
     var observedBitrate: Double { get }
     var indicatedBitrate: Double { get }
@@ -78,6 +79,7 @@ struct AVPlayerItemAccessLogProvider: AccessLogProviding {
     }
 }
 
+@MainActor
 protocol StatsPublisherProtocol: AnyObject {
     func attach(item: AVPlayerItem)
     func detach()

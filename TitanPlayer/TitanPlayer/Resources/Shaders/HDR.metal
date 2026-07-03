@@ -1,5 +1,13 @@
 #include <metal_stdlib>
 using namespace metal;
+#include "ShaderTypes.h"
+
+float3 hdr_aces_tone_map(float3 x);
+float3 hdr_dynamic_tone_map(float3 color, constant HDRUniforms &uniforms);
+float3 hdr_apply_dynamic_adjustments(float3 color, constant HDRUniforms &uniforms);
+float3 hdr_pq_to_linear(float3 pq);
+float3 hdr_hlg_to_linear(float3 hlg);
+float3 hdr_linear_to_srgb(float3 linear);
 
 kernel void hdr_tone_mapping(
     texture2d<float, access::read> inputTexture [[texture(0)]],

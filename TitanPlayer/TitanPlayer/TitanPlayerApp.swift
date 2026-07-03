@@ -17,9 +17,21 @@ struct TitanPlayerApp: App {
                     PrivacyConsentDialog()
                         .environmentObject(telemetry)
                 }
+                .alert(
+                    "Player Engine Error",
+                    isPresented: Binding(
+                        get: { session.initializationError != nil },
+                        set: { if !$0 { session.initializationError = nil } }
+                    )
+                ) {
+                    Button("OK") { session.initializationError = nil }
+                    Button("Restart") { NSApplication.shared.terminate(nil) }
+                } message: {
+                    Text(session.initializationError ?? "Failed to initialize player engine. Please restart the app.")
+                }
                 .onAppear {
                     telemetry.initialize()
-                    SessionLocator.shared.attach(session)
+                    // Session is attached in PlaybackSession.init
                 }
         }
         .defaultSize(width: 960, height: 540)

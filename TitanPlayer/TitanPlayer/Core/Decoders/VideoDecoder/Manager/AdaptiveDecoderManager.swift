@@ -209,9 +209,15 @@ class AdaptiveDecoderManager: @unchecked Sendable {
     
     private func getFallbackDecoder(for decoder: VideoDecoding) -> VideoDecoding? {
         if decoder is VideoToolboxDecoder {
-            return softwareDecoder ?? FFmpegSoftwareDecoder()
+            if softwareDecoder == nil {
+                softwareDecoder = FFmpegSoftwareDecoder()
+            }
+            return softwareDecoder
         } else if decoder is FFmpegSoftwareDecoder {
-            return hardwareDecoder ?? VideoToolboxDecoder()
+            if hardwareDecoder == nil {
+                hardwareDecoder = VideoToolboxDecoder()
+            }
+            return hardwareDecoder
         }
         return nil
     }

@@ -260,21 +260,49 @@ final class AudioEngine: ObservableObject {
     }
 
     private func applyHRTF(to buffer: AVAudioPCMBuffer) {
-        if hrtfData.isEmpty { return }
-
-        // Simple HRTF application - in production, this would use proper convolution
         let frameCount = Int(buffer.frameLength)
+        let sampleRate = buffer.format.sampleRate
         guard let leftChannel = buffer.floatChannelData?[0],
               let rightChannel = buffer.floatChannelData?[1] else { return }
 
-        // Apply basic stereo HRTF (simplified for this implementation)
-        for i in 0..<frameCount {
-            // Apply slight phase and amplitude differences
-            let leftSample = leftChannel[i]
-            let rightSample = rightChannel[i]
+        let headRadius: Float = 0.0875
+        let speedOfSound: Float = 343.0
+        let azimuth = atan2(spatialConfig.headPosition.x, spatialConfig.headPosition.z)
+        let absAzimuth = abs(azimuth)
+        let normalizedAzimuth = min(absAzimuth / (Float.pi / 2), 1.0)
+        let itdMs = Double((headRadius / speedOfSound) * (absAzimuth + sin(absAzimuth)) * 1000)
+        let itdSamples = itdMs * sampleRate / 1000.0
+        let headShadowCutoff: Float = 4000.0 - normalizedAzimuth * 3200.0
+        let rc: Float = 1.0 / (2.0 * .pi * headShadowCutoff)
+        let alpha: Float = Float(1.0 / (sampleRate * Double(rc) + 1.0))
 
-            leftChannel[i] = leftSample * 0.9
-            rightChannel[i] = rightSample * 0.9
+        var leftFilter: Float = 0
+        var rightFilter: Float = 0
+
+        for i in 0..<frameCount {
+            let delayWholeL = Int(floor(itdSamples * 0.5))
+            let delayFracL = Float(itdSamples * 0.5 - Double(delayWholeL))
+            var leftSample: Float = 0
+            let srcIdxL = i - delayWholeL
+            if srcIdxL >= 1 && srcIdxL < frameCount {
+                leftSample = leftChannel[srcIdxL] * (1 - delayFracL) + leftChannel[srcIdxL - 1] * delayFracL
+            } else if srcIdxL >= 0 && srcIdxL < frameCount {
+                leftSample = leftChannel[srcIdxL]
+            }
+            leftFilter = alpha * leftSample + (1 - alpha) * leftFilter
+            leftChannel[i] = leftFilter
+
+            let delayWholeR = Int(floor(-itdSamples * 0.5))
+            let delayFracR = Float(-itdSamples * 0.5 - Double(delayWholeR))
+            var rightSample: Float = 0
+            let srcIdxR = i - delayWholeR
+            if srcIdxR >= 1 && srcIdxR < frameCount {
+                rightSample = rightChannel[srcIdxR] * (1 - delayFracR) + rightChannel[srcIdxR - 1] * delayFracR
+            } else if srcIdxR >= 0 && srcIdxR < frameCount {
+                rightSample = rightChannel[srcIdxR]
+            }
+            rightFilter = alpha * rightSample + (1 - alpha) * rightFilter
+            rightChannel[i] = rightFilter
         }
     }
 
@@ -379,18 +407,45 @@ final class AudioEngine: ObservableObject {
     }
 
     nonisolated private func loadDefaultHRTF() -> [HRTFData] {
-        // Generate simple default HRTF data
-        // In production, this would load from a proper HRTF database
         var hrtf: [HRTFData] = []
+        let headRadius: Float = 0.0875
+        let speedOfSound: Float = 343.0
+        let sampleRate: Double = 48000
+        let filterLength = 64
 
-        // Generate HRTF for 360 degrees around the listener
-        for angle in stride(from: 0.0, through: 360.0, by: 5.0) {
-            let radians = Float(angle * .pi / 180.0)
+        for angle in stride(from: -180.0, through: 180.0, by: 5.0) {
+            let azimuth = Float(angle * .pi / 180.0)
+            let absAzimuth = abs(azimuth)
+            let itdMs = Double((headRadius / speedOfSound) * (absAzimuth + sin(absAzimuth)) * 1000)
+            let itdSamples = Int(itdMs * sampleRate / 1000.0)
+
+            var leftIR = [Float](repeating: 0, count: filterLength)
+            var rightIR = [Float](repeating: 0, count: filterLength)
+
+            let delayL = max(0, itdSamples)
+            let delayR = max(0, -itdSamples)
+
+            if delayL < filterLength { leftIR[delayL] = 0.8 }
+            if delayR < filterLength { rightIR[delayR] = 0.8 }
+
+            let normalizedAzimuth = min(absAzimuth / (.pi / 2), 1.0)
+            let cutoff: Float = 4000.0 - normalizedAzimuth * 3200.0
+            let rc: Float = 1.0 / (2.0 * .pi * cutoff)
+            let alpha: Float = Float(1.0 / (sampleRate * Double(rc) + 1.0))
+            var leftState: Float = 0
+            var rightState: Float = 0
+            for j in 0..<filterLength {
+                leftState = alpha * leftIR[j] + (1 - alpha) * leftState
+                leftIR[j] = leftState
+                rightState = alpha * rightIR[j] + (1 - alpha) * rightState
+                rightIR[j] = rightState
+            }
+
             let hrtfEntry = HRTFData(
-                leftEar: Array(repeating: 0.5, count: 512),
-                rightEar: Array(repeating: 0.5, count: 512),
-                sampleRate: 48000,
-                azimuth: radians,
+                leftEar: leftIR,
+                rightEar: rightIR,
+                sampleRate: sampleRate,
+                azimuth: azimuth,
                 elevation: 0.0
             )
             hrtf.append(hrtfEntry)

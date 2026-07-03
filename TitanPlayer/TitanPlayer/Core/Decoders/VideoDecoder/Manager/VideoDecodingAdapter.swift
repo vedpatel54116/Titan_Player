@@ -24,11 +24,12 @@ final class VideoDecodingAdapter: MediaDecoding {
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
                 throw DecoderError.noFramesDecoded
             }
+            let colorSpace = Self.detectColorSpace(from: sampleBuffer)
             let videoFrame = VideoFrame(
                 pixelBuffer: pixelBuffer,
                 timestamp: packet.timestamp,
                 duration: packet.duration,
-                colorSpace: .sRGB,
+                colorSpace: colorSpace,
                 sampleBuffer: sampleBuffer
             )
             return .video(videoFrame)
@@ -42,6 +43,21 @@ final class VideoDecodingAdapter: MediaDecoding {
             )
             return .video(videoFrame)
         }
+    }
+
+    private static func detectColorSpace(from sampleBuffer: CMSampleBuffer) -> ColorSpace {
+        guard let formatDesc = CMSampleBufferGetFormatDescription(sampleBuffer) else {
+            return .sRGB
+        }
+        if let colorPrimaries = CMFormatDescriptionGetExtension(
+            formatDesc,
+            extensionKey: kCMFormatDescriptionExtension_ColorPrimaries
+        ) as? String {
+            if colorPrimaries == (kCMFormatDescriptionColorPrimaries_ITU_R_2020 as String) {
+                return .bt2020
+            }
+        }
+        return .sRGB
     }
 
     func flush() async { await decoder.flush() }

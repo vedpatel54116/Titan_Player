@@ -133,6 +133,8 @@ final class PlaybackSession: ObservableObject {
                 return "Failed to open \"\(name)\": The file contains no playable video or audio tracks. The codec may be unsupported."
             case .assetLoadFailed(let underlying):
                 return "Failed to open \"\(name)\": \(underlying.localizedDescription)"
+            case .assetLoadFailedWithStatus(let status, let underlying):
+                return "Failed to open \"\(name)\": OSStatus \(status) — \(underlying.localizedDescription)"
             case .decodingFailed(let underlying):
                 return "Failed to open \"\(name)\": Decoding failed — \(underlying.localizedDescription)"
             case .audioOutputFailed(let underlying):
@@ -142,6 +144,9 @@ final class PlaybackSession: ObservableObject {
             case .seekFailed:
                 return "Failed to open \"\(name)\": Seeking within the file failed."
             }
+        }
+        if let mediaError = error as? MediaError {
+            return "Failed to open \"\(name)\": \(mediaError.message)"
         }
         if let decoderError = error as? DecoderError {
             switch decoderError {
@@ -207,7 +212,13 @@ final class PlaybackSession: ObservableObject {
         self.displayManager = DisplayManager()
         self.airPlayController = AirPlayController(monitor: engine.avPlayer)
         self.streaming = StreamingManager.makeDefault()
-        self.performance = PerformanceOptimizer.makeDefault()
+        let perf = PerformanceOptimizer.makeDefault()
+        if let metal = resolvedVideoRenderer as? MetalRenderer {
+            perf.registerAdapter(RenderAdapter(target: metal))
+        }
+        perf.registerAdapter(DecoderAdapter(target: engine.adaptiveDecoderManager))
+        perf.registerAdapter(StreamingAdapter(target: self.streaming))
+        self.performance = perf
         if let metal = resolvedVideoRenderer as? MetalRenderer {
             metal.delegate = self
         }
@@ -289,9 +300,10 @@ final class PlaybackSession: ObservableObject {
                 streaming.attach(player: engine.avPlayer)
             }
             let videoTrack = mediaInfo?.videoTracks.first
+            let decoderIsHW = await engine.adaptiveDecoderManager.activeDecoderType?.contains("VideoToolbox") ?? false
             performance.observe(
                 settings: CurrentPlaybackSettings(
-                    decoderIsHW: false,
+                    decoderIsHW: decoderIsHW,
                     resolution: CGSize(
                         width: videoTrack?.width ?? 1920,
                         height: videoTrack?.height ?? 1080
@@ -566,8 +578,12 @@ final class PlaybackSession: ObservableObject {
     private func installKeyMonitor() {
         let side = DispatcherSideEffects(
             toggleFullscreen: { NSApp.keyWindow?.toggleFullScreen(nil) },
-            toggleMiniPlayer: {
-                SessionLocator.MiniWindowController.shared.toggle { _ in MiniPlayerView() }
+            toggleMiniPlayer: { [weak self] in
+                guard let self else { return }
+                SessionLocator.MiniWindowController.shared.toggle(
+                    using: { _ in MiniPlayerView() },
+                    session: self
+                )
             },
             newLibraryWindow: { TitanCommands.openLibraryPanel() },
             openFile:         { TitanCommands.openFileUsingPanel(session: self) }

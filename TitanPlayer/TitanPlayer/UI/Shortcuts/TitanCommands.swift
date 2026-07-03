@@ -18,13 +18,15 @@ final class SessionLocator {
     final class MiniWindowController {
         static let shared = MiniWindowController()
         private(set) weak var window: NSWindow?
+        private weak var session: PlaybackSession?
 
-        func toggle(using viewBuilder: (PlaybackSession) -> MiniPlayerView) {
+        func toggle(using viewBuilder: (PlaybackSession) -> MiniPlayerView,
+                    session: PlaybackSession) {
             if let existing = NSApp.windows.first(where: { $0.title == "Mini Player" }) {
                 existing.close()
                 return
             }
-            guard let session = SessionLocator.shared.session else { return }
+            self.session = session
             let style: NSWindow.StyleMask = [.borderless, .resizable]
             let window = NSWindow(
                 contentRect: NSRect(x: 0, y: 0, width: 320, height: 180),
@@ -50,10 +52,11 @@ struct TitanCommands: Commands {
         self.session = session
         let side = DispatcherSideEffects(
             toggleFullscreen: { NSApp.keyWindow?.toggleFullScreen(nil) },
-            toggleMiniPlayer: {
-                SessionLocator.MiniWindowController.shared.toggle { session in
-                    MiniPlayerView()
-                }
+            toggleMiniPlayer: { [session] in
+                SessionLocator.MiniWindowController.shared.toggle(
+                    using: { _ in MiniPlayerView() },
+                    session: session
+                )
             },
             newLibraryWindow: { TitanCommands.openLibraryPanel() },
             openFile:         { TitanCommands.openFileUsingPanel(session: session) }
@@ -131,7 +134,11 @@ struct TitanCommands: Commands {
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
         panel.begin { response in
-            guard response == .OK, let url = panel.url else { return }
+            guard response == .OK, let url = panel.url else {
+                NSLog("[TitanCommands] File panel cancelled or no URL")
+                return
+            }
+            NSLog("[TitanCommands] File selected via panel: %@", url.path)
             Task { @MainActor in await session.openFile(url: url) }
         }
     }

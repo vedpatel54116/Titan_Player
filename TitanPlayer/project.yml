@@ -14,6 +14,7 @@ configs:
 settings:
   base:
     SWIFT_VERSION: "5.0"
+    ARCHS: ["arm64"]
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ENABLE_TESTABILITY: YES
     DEVELOPMENT_TEAM: ""
@@ -28,11 +29,11 @@ settings:
   configs:
     AppStore:
       CODE_SIGN_IDENTITY: "Apple Distribution"
-      CODE_SIGN_ENTITLEMENTS: TitanPlayer/TitanPlayer/TitanPlayer.entitlements
+      CODE_SIGN_ENTITLEMENTS: TitanPlayer/TitanPlayer.entitlements
       ENABLE_APP_SANDBOX: YES
     Direct:
       CODE_SIGN_IDENTITY: "Developer ID Application"
-      CODE_SIGN_ENTITLEMENTS: TitanPlayer/TitanPlayer/TitanPlayer.Direct.entitlements
+      CODE_SIGN_ENTITLEMENTS: TitanPlayer/TitanPlayer.Direct.entitlements
       ENABLE_APP_SANDBOX: NO
 
 packages:
@@ -44,6 +45,9 @@ packages:
       - Libavformat
       - Libavutil
       - Libswscale
+  Sentry:
+    url: https://github.com/getsentry/sentry-cocoa
+    from: 8.0.0
 
 targets:
   TitanPlayer:
@@ -58,10 +62,22 @@ targets:
           - "Info.plist"
     settings:
       base:
-        INFOPLIST_FILE: TitanPlayer/Info.plist
+        INFOPLIST_FILE: TitanPlayer/TitanPlayer/Info.plist
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
           - "@executable_path/../Frameworks"
+        HEADER_SEARCH_PATHS:
+          - "$(inherited)"
+          - /opt/homebrew/include
+        SWIFT_INCLUDE_PATHS:
+          - "$(SRCROOT)/TitanPlayer/Sources/CLibAss"
+          - /opt/homebrew/include
+        LIBRARY_SEARCH_PATHS:
+          - "$(inherited)"
+          - /opt/homebrew/lib
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-lass"
     dependencies:
       - package: FFmpegBuild
         product: FFmpegBuild
@@ -73,45 +89,40 @@ targets:
         product: Libavutil
       - package: FFmpegBuild
         product: Libswscale
-    preBuildScripts:
-      - script: |
-          set -euo pipefail
-          cd "${SRCROOT}/TitanPlayer"
-          CONFIG_LOWER=$(echo "${CONFIGURATION}" | tr '[:upper:]' '[:lower:]')
-          case "${CONFIG_LOWER}" in
-            debug)   swift build -c debug  ;;
-            *)       swift build -c release ;;
-          esac
-          mkdir -p "${BUILT_PRODUCTS_DIR}/${EXECUTABLE_FOLDER_PATH}"
-          DEST="${BUILT_PRODUCTS_DIR}/${EXECUTABLE_FOLDER_PATH}/TitanPlayer"
-          cp ".build/${CONFIG_LOWER}/TitanPlayer" "${DEST}"
-          echo "embedded swiftrm executable at ${DEST}"
-      - name: SwiftPM build
+      - package: Sentry
+        product: Sentry
     postBuildScripts:
       - script: |
           set -euo pipefail
-          SHADER_DIR="${SRCROOT}/TitanPlayer/Resources/Shaders"
+          SHADER_DIR="${SRCROOT}/TitanPlayer/TitanPlayer/Resources/Shaders"
           OUTPUT_DIR="${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}"
+          METAL_DIR="${DERIVED_FILE_DIR}/Metal"
           mkdir -p "${OUTPUT_DIR}"
-          mkdir -p "${DERIVED_FILE_DIR}/Metal"
-          METAL_FILES=()
-          while IFS= read -r -d '' file; do
-            METAL_FILES+=("$file")
-          done < <(find "${SHADER_DIR}" -name "*.metal" -print0)
-          if [ ${#METAL_FILES[@]} -eq 0 ]; then
+          mkdir -p "${METAL_DIR}"
+          count=0
+          for file in "${SHADER_DIR}"/*.metal; do
+            if [ -f "$file" ]; then
+              base=$(basename "$file" .metal)
+              xcrun metal -c "$file" -I "${SHADER_DIR}" -o "${METAL_DIR}/${base}.air"
+              count=$((count + 1))
+            fi
+          done
+          if [ "$count" -eq 0 ]; then
             echo "warning: No .metal files found in ${SHADER_DIR}"
             exit 0
           fi
-          xcrun metal -c "${METAL_FILES[@]}" \
-            -I "${SHADER_DIR}" \
-            -o "${DERIVED_FILE_DIR}/Metal/default.air"
-          xcrun metallib "${DERIVED_FILE_DIR}/Metal/default.air" \
-            -o "${OUTPUT_DIR}/default.metallib"
+          cd "${METAL_DIR}"
+          xcrun metallib *.air -o "${OUTPUT_DIR}/default.metallib"
           echo "Compiled Metal shaders → ${OUTPUT_DIR}/default.metallib"
       - name: Compile Metal Shaders
+        inputFiles:
+          - "$(SRCROOT)/TitanPlayer/TitanPlayer/Resources/Shaders/*.metal"
+        outputFiles:
+          - "$(DERIVED_FILE_DIR)/Metal/default.air"
+          - "$(DERIVED_FILE_DIR)/Metal/common.metallib"
     resources:
-      - path: TitanPlayer/Resources/Assets.xcassets
-      - path: TitanPlayer/Resources/Shaders
+      - path: TitanPlayer/TitanPlayer/Resources/Assets.xcassets
+      - path: TitanPlayer/TitanPlayer/Resources/Shaders
         buildPhase: resources
         optional: true
 

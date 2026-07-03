@@ -6,6 +6,33 @@ import Libavutil
 import Libswscale
 import os
 
+// swiftlint:disable identifier_name
+// FFmpeg C enum constants may not bridge from xcframeworks when building
+// via the Xcode project (only via SPM).  Provide raw-value fallbacks.
+#if !SWIFT_PACKAGE
+private let _AV_PIX_FMT_P010LE = AVPixelFormat(rawValue: 126)
+private let _AV_PIX_FMT_NV12   = AVPixelFormat(rawValue: 23)
+private let _AV_CODEC_ID_H264        = AVCodecID(rawValue: 27)
+private let _AV_CODEC_ID_HEVC        = AVCodecID(rawValue: 173)
+private let _AV_CODEC_ID_VP9         = AVCodecID(rawValue: 167)
+private let _AV_CODEC_ID_AV1         = AVCodecID(rawValue: 32779)
+private let _AV_CODEC_ID_MPEG2VIDEO  = AVCodecID(rawValue: 2)
+private let _AV_CODEC_ID_VC1         = AVCodecID(rawValue: 70)
+private let _AV_INPUT_BUFFER_PADDING_SIZE = 32
+private let _FF_THREAD_FRAME: Int32 = 1
+#else
+private let _AV_PIX_FMT_P010LE = AV_PIX_FMT_P010LE
+private let _AV_PIX_FMT_NV12   = AV_PIX_FMT_NV12
+private let _AV_CODEC_ID_H264        = AV_CODEC_ID_H264
+private let _AV_CODEC_ID_HEVC        = AV_CODEC_ID_HEVC
+private let _AV_CODEC_ID_VP9         = AV_CODEC_ID_VP9
+private let _AV_CODEC_ID_AV1         = AV_CODEC_ID_AV1
+private let _AV_CODEC_ID_MPEG2VIDEO  = AV_CODEC_ID_MPEG2VIDEO
+private let _AV_CODEC_ID_VC1         = AV_CODEC_ID_VC1
+private let _AV_INPUT_BUFFER_PADDING_SIZE = AV_INPUT_BUFFER_PADDING_SIZE
+private let _FF_THREAD_FRAME = FF_THREAD_FRAME
+#endif
+
 // MARK: - FFmpeg Software Decoder
 
 final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
@@ -61,14 +88,14 @@ final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
             codecContext = ctx
             ctx.pointee.width = Int32(track.width)
             ctx.pointee.height = Int32(track.height)
-            ctx.pointee.pix_fmt = track.isHDR ? AV_PIX_FMT_P010LE : AV_PIX_FMT_NV12
+            ctx.pointee.pix_fmt = track.isHDR ? _AV_PIX_FMT_P010LE : _AV_PIX_FMT_NV12
             ctx.pointee.thread_count = 0
-            ctx.pointee.thread_type = FF_THREAD_FRAME
+            ctx.pointee.thread_type = _FF_THREAD_FRAME
 
             // Copy extradata (SPS/PPS/VPS) into codec context
             if let extradata = track.extradata, !extradata.isEmpty {
                 let extradataSize = extradata.count
-                let buffer = av_mallocz(extradataSize + Int(AV_INPUT_BUFFER_PADDING_SIZE))
+                let buffer = av_mallocz(extradataSize + Int(_AV_INPUT_BUFFER_PADDING_SIZE))
                 guard let buffer = buffer else {
                     teardownCodecContext()
                     state = .error(.softwareFailure)
@@ -267,7 +294,7 @@ final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
 
     private func ensureScaler(srcWidth: Int, srcHeight: Int, srcFormat: AVPixelFormat) {
         if swsContext != nil { return }
-        let dstFormat: AVPixelFormat = trackIsHDR ? AV_PIX_FMT_P010LE : AV_PIX_FMT_NV12
+        let dstFormat: AVPixelFormat = trackIsHDR ? _AV_PIX_FMT_P010LE : _AV_PIX_FMT_NV12
         swsContext = sws_getContext(
             Int32(srcWidth), Int32(srcHeight), srcFormat,
             Int32(srcWidth), Int32(srcHeight), dstFormat,
@@ -320,12 +347,12 @@ final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
 
     static func avCodecID(for codec: VideoCodec) -> AVCodecID {
         switch codec {
-        case .h264:   return AV_CODEC_ID_H264
-        case .hevc:   return AV_CODEC_ID_HEVC
-        case .vp9:    return AV_CODEC_ID_VP9
-        case .av1:    return AV_CODEC_ID_AV1
-        case .mpeg2:  return AV_CODEC_ID_MPEG2VIDEO
-        case .vc1:    return AV_CODEC_ID_VC1
+        case .h264:   return _AV_CODEC_ID_H264
+        case .hevc:   return _AV_CODEC_ID_HEVC
+        case .vp9:    return _AV_CODEC_ID_VP9
+        case .av1:    return _AV_CODEC_ID_AV1
+        case .mpeg2:  return _AV_CODEC_ID_MPEG2VIDEO
+        case .vc1:    return _AV_CODEC_ID_VC1
         }
     }
 }

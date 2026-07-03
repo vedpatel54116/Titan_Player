@@ -9,6 +9,7 @@ struct StreamingVariantSnapshot: Equatable {
     let codec: String?
 }
 
+@MainActor
 protocol VariantProviding {
     var currentVariants: [StreamingVariantSnapshot] { get }
     var selectedVariant: StreamingVariantSnapshot? { get }

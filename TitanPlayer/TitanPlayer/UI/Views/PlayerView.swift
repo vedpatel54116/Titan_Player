@@ -1,13 +1,14 @@
 import SwiftUI
 import UniformTypeIdentifiers
 import AppKit
+import Combine
 
 struct PlayerView: View {
     @EnvironmentObject var session: PlaybackSession
     @State private var showControls = true
-    @State private var hideWorkItem: DispatchWorkItem?
     @State private var cursorHidden = false
     @State private var showingFileImporter = false
+    @State private var lastInteraction = Date.distantFuture
 
     var body: some View {
         ZStack {
@@ -70,7 +71,9 @@ struct PlayerView: View {
         }
         .accessibilityIdentifier("playerView.root")
         .onAppear { revealControls() }
-        .onHover { _ in revealControls() }
+        .onHover { hovering in
+            if hovering { revealControls() }
+        }
         .onChange(of: showControls) { _, visible in
             if visible { unhideCursor() } else if session.playState == .playing { hideCursor() }
         }
@@ -78,7 +81,6 @@ struct PlayerView: View {
             if newstate == .playing {
                 revealControls()
             } else {
-                cancelHideTimer()
                 withAnimation { showControls = true }
                 unhideCursor()
             }
@@ -105,28 +107,31 @@ struct PlayerView: View {
     }
 
     private func revealControls() {
-        hideWorkItem?.cancel()
+        lastInteraction = Date()
         withAnimation { showControls = true }
         if cursorHidden { unhideCursor() }
-        guard session.playState == .playing else { return }
-        let work = DispatchWorkItem { [self] in
-            guard session.playState == .playing else { return }
+        scheduleAutoHide()
+    }
+
+    private func scheduleAutoHide() {
+        let autoHideDelay: TimeInterval = 3
+        DispatchQueue.main.asyncAfter(deadline: .now() + autoHideDelay) { [weak session] in
+            guard let session, session.playState == .playing else { return }
+            let elapsed = Date().timeIntervalSince(lastInteraction)
+            guard elapsed >= autoHideDelay else {
+                scheduleAutoHide()
+                return
+            }
             withAnimation { showControls = false }
             hideCursor()
         }
-        hideWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3, execute: work)
-    }
-
-    private func cancelHideTimer() {
-        hideWorkItem?.cancel()
-        hideWorkItem = nil
     }
 
     private func hideCursor() { cursorHidden = true; NSCursor.hide() }
     private func unhideCursor() { if cursorHidden { cursorHidden = false; NSCursor.unhide() } }
 
     private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        revealControls()
         guard let provider = providers.first else { return false }
         provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
             guard let data = item as? Data,

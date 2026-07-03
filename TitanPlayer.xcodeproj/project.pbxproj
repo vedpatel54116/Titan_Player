@@ -161,6 +161,10 @@
 		FEA8B9EFA27B5197230E13F5 /* VideoToolboxDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8816B0344655D064735D64C1 /* VideoToolboxDecoder.swift */; };
 		FF028C7E0E079129BC7E8A1E /* DASHPlayerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53AA3513AE45E8CDC08495EA /* DASHPlayerFactory.swift */; };
 		FF97C60F02FB0CFF1B8048E9 /* PlaybackHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5491380675E13C6203ECA8 /* PlaybackHistory.swift */; };
+		4A7C62609C0144098A73AB61 /* AudioTapProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3378DF23CD924BCA9A34E08C /* AudioTapProvider.swift */; };
+		32A3C15CA9444AB691FB2988 /* AVPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC90A3C7CC374206A961B997 /* AVPlayerView.swift */; };
+		FF5D9A566884488BB9EE48BD /* SynchronizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B8C187DC6F441BC84642A47 /* SynchronizationProvider.swift */; };
+		F0CBB6ED1C4C41178EE7C0E1 /* VideoDecodingAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2A56085E32F4AFB98487C79 /* VideoDecodingAdapter.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -222,7 +226,6 @@
 		6B4D8B6C6C392F1CBE9E911D /* NSWindowAccessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSWindowAccessor.swift; sourceTree = "<group>"; };
 		6DEA0779795C15FFDA566411 /* SubtitleTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleTypes.swift; sourceTree = "<group>"; };
 		6EF06905CA8341C71E404862 /* Reach.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reach.swift; sourceTree = "<group>"; };
-		7030CD276BC3547942B95C32 /* FFmpegBuild */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FFmpegBuild; path = TitanPlayer/.build/checkouts/FFmpegBuild; sourceTree = SOURCE_ROOT; };
 		7061D88B260AB07067262AE0 /* PlaybackStatsPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackStatsPublisher.swift; sourceTree = "<group>"; };
 		70B148115C23CC639294003E /* AudioMeterBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMeterBar.swift; sourceTree = "<group>"; };
 		714D68480CB917620F542098 /* VectorscopeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VectorscopeView.swift; sourceTree = "<group>"; };
@@ -315,6 +318,10 @@
 		FE75152CB87F998BC514D90E /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 		FEEC917B8912F5BD15CA61C1 /* AdaptiveDecoderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveDecoderManager.swift; sourceTree = "<group>"; };
 		FF9D070238CF6D127BD84DFC /* ResourcePredictor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourcePredictor.swift; sourceTree = "<group>"; };
+		3378DF23CD924BCA9A34E08C /* AudioTapProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTapProvider.swift; sourceTree = "<group>"; };
+		EC90A3C7CC374206A961B997 /* AVPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVPlayerView.swift; sourceTree = "<group>"; };
+		0B8C187DC6F441BC84642A47 /* SynchronizationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynchronizationProvider.swift; sourceTree = "<group>"; };
+		C2A56085E32F4AFB98487C79 /* VideoDecodingAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDecodingAdapter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -359,7 +366,6 @@
 		1054662454F43004FFE50B0D /* Packages */ = {
 			isa = PBXGroup;
 			children = (
-				7030CD276BC3547942B95C32 /* FFmpegBuild */,
 			);
 			name = Packages;
 			sourceTree = "<group>";
@@ -397,6 +403,7 @@
 				B488E7AEC52EA461AE7D016D /* PlaybackEngine.swift */,
 				33DFFB5DCFADB187BA6BE27E /* PlaybackError.swift */,
 				5E3B2FA61CFEE79FE1E46C0A /* PlayState.swift */,
+				0B8C187DC6F441BC84642A47 /* SynchronizationProvider.swift */,
 				43D1645CF35E0738F4E29ABF /* TimeObserver.swift */,
 				750DBC7C32A92ADC16EABA4E /* Audio */,
 			);
@@ -615,6 +622,7 @@
 			children = (
 				FEEC917B8912F5BD15CA61C1 /* AdaptiveDecoderManager.swift */,
 				BBE486E074CA120AC2CA9650 /* DecoderSelector.swift */,
+				C2A56085E32F4AFB98487C79 /* VideoDecodingAdapter.swift */,
 			);
 			path = Manager;
 			sourceTree = "<group>";
@@ -672,6 +680,7 @@
 			isa = PBXGroup;
 			children = (
 				65315CE75C8802C4027BC4F8 /* AudioTappable.swift */,
+				3378DF23CD924BCA9A34E08C /* AudioTapProvider.swift */,
 				3CFC16D28B6D56921ADD8B94 /* MediaDecoding.swift */,
 				DD77603A95256C486C9CBEE6 /* MediaDemuxing.swift */,
 				8E0120BB5DEFD6C63EDB6A07 /* SharedTypes.swift */,
@@ -703,6 +712,7 @@
 		B1310576B161BA61B9EF6C42 /* Renderers */ = {
 			isa = PBXGroup;
 			children = (
+				EC90A3C7CC374206A961B997 /* AVPlayerView.swift */,
 				AD4ED308B1FC5B4D743AACCB /* MirrorMTKView.swift */,
 			);
 			path = Renderers;
@@ -842,6 +852,7 @@
 				D8A4736597E0398A0280B455 /* Libavformat */,
 				2736847009E65F6C7E9BE2DC /* Libavutil */,
 				A0421AA94CC47871B6D4CCAD /* Libswscale */,
+				9E8C9280CC623757FA89AEDE /* Sentry */,
 			);
 			productName = TitanPlayer;
 			productReference = EBEC1E6F3C2465E83E6F00A7 /* TitanPlayer.app */;
@@ -872,7 +883,8 @@
 			mainGroup = 91BB0F579FC6A8735DEC137B;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				672009973AE986B1FD96E5C1 /* XCLocalSwiftPackageReference ".build/checkouts/FFmpegBuild" */,
+				672009973AE986B1FD96E5C1 /* XCRemoteSwiftPackageReference "FFmpegBuild" */,
+				9FFFB37A34D8967DD6E8E433 /* XCRemoteSwiftPackageReference "Sentry" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2684F6A2CC6F266EDE56DDF2 /* Products */;
@@ -900,7 +912,7 @@
 			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
+			shellPath = /bin/bash;
 			shellScript = "set -euo pipefail\nSHADER_DIR=\"${SRCROOT}/TitanPlayer/Resources/Shaders\"\nOUTPUT_DIR=\"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"${OUTPUT_DIR}\"\nmkdir -p \"${DERIVED_FILE_DIR}/Metal\"\nMETAL_FILES=()\nwhile IFS= read -r -d '' file; do\n  METAL_FILES+=(\"$file\")\ndone < <(find \"${SHADER_DIR}\" -name \"*.metal\" -print0)\nif [ ${#METAL_FILES[@]} -eq 0 ]; then\n  echo \"warning: No .metal files found in ${SHADER_DIR}\"\n  exit 0\nfi\nxcrun metal -c \"${METAL_FILES[@]}\" \\\n  -I \"${SHADER_DIR}\" \\\n  -o \"${DERIVED_FILE_DIR}/Metal/default.air\"\nxcrun metallib \"${DERIVED_FILE_DIR}/Metal/default.air\" \\\n  -o \"${OUTPUT_DIR}/default.metallib\"\necho \"Compiled Metal shaders → ${OUTPUT_DIR}/default.metallib\"\n";
 		};
 		FAB7914D28523A347A1397BA /* Run Script */ = {
@@ -1077,6 +1089,10 @@
 				FEA8B9EFA27B5197230E13F5 /* VideoToolboxDecoder.swift in Sources */,
 				1EFF0555626103B98E3DC92D /* WaveformView.swift in Sources */,
 				AB610818C69889AD91F7EA2E /* ZeroCopyBuffer.swift in Sources */,
+				4A7C62609C0144098A73AB61 /* AudioTapProvider.swift in Sources */,
+				32A3C15CA9444AB691FB2988 /* AVPlayerView.swift in Sources */,
+				FF5D9A566884488BB9EE48BD /* SynchronizationProvider.swift in Sources */,
+				F0CBB6ED1C4C41178EE7C0E1 /* VideoDecodingAdapter.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1088,7 +1104,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				INFOPLIST_FILE = TitanPlayer/Info.plist;
+				INFOPLIST_FILE = TitanPlayer/TitanPlayer/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -1102,7 +1118,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				INFOPLIST_FILE = TitanPlayer/Info.plist;
+				INFOPLIST_FILE = TitanPlayer/TitanPlayer/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -1170,10 +1186,19 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				OTHER_LDFLAGS = (
+					"-L/opt/homebrew/Cellar/libass/0.17.5/lib",
+					"-lass",
+					"-liconv",
+					"-lbz2",
+					"-lz",
+					"-lc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				PRODUCT_NAME = TitanPlayer;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TitanPlayer/Sources/CLibAss";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 			};
@@ -1184,7 +1209,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				INFOPLIST_FILE = TitanPlayer/Info.plist;
+				INFOPLIST_FILE = TitanPlayer/TitanPlayer/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -1198,7 +1223,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
-				INFOPLIST_FILE = TitanPlayer/Info.plist;
+				INFOPLIST_FILE = TitanPlayer/TitanPlayer/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -1263,10 +1288,19 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				OTHER_LDFLAGS = (
+					"-L/opt/homebrew/Cellar/libass/0.17.5/lib",
+					"-lass",
+					"-liconv",
+					"-lbz2",
+					"-lz",
+					"-lc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				PRODUCT_NAME = TitanPlayer;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TitanPlayer/Sources/CLibAss";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 			};
@@ -1334,10 +1368,19 @@
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
+				OTHER_LDFLAGS = (
+					"-L/opt/homebrew/Cellar/libass/0.17.5/lib",
+					"-lass",
+					"-liconv",
+					"-lbz2",
+					"-lz",
+					"-lc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				PRODUCT_NAME = TitanPlayer;
 				SDKROOT = macosx;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TitanPlayer/Sources/CLibAss";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
@@ -1402,10 +1445,19 @@
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
+				OTHER_LDFLAGS = (
+					"-L/opt/homebrew/Cellar/libass/0.17.5/lib",
+					"-lass",
+					"-liconv",
+					"-lbz2",
+					"-lz",
+					"-lc++",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				PRODUCT_NAME = TitanPlayer;
 				SDKROOT = macosx;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TitanPlayer/Sources/CLibAss";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 			};
@@ -1438,10 +1490,21 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		9FFFB37A34D8967DD6E8E433 /* XCRemoteSwiftPackageReference "Sentry" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 8.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCLocalSwiftPackageReference section */
-		672009973AE986B1FD96E5C1 /* XCLocalSwiftPackageReference ".build/checkouts/FFmpegBuild" */ = {
+		672009973AE986B1FD96E5C1 /* XCLocalSwiftPackageReference "TitanPlayer/.build/checkouts/FFmpegBuild" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = .build/checkouts/FFmpegBuild;
+			relativePath = TitanPlayer/.build/checkouts/FFmpegBuild;
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -1465,6 +1528,10 @@
 		D8A4736597E0398A0280B455 /* Libavformat */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Libavformat;
+		};
+		9E8C9280CC623757FA89AEDE /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Sentry;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

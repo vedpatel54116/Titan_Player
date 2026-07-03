@@ -39,8 +39,7 @@ struct ResourcePredictor: Sendable {
 
         let memory = medianPixelsToMB(window)
 
-        let drain: Double = 0    // Battery regression deferred; PlaybackSample does not yet
-                                 // carry batteryLevel historically.
+        let drain: Double = computeBatteryDrain(window)
 
         let base = thermalBase(currentSystemState.thermalState)
         let thermalRisk = min(1.0, base + (cpu > 0.7 ? 0.2 : 0))
@@ -76,6 +75,16 @@ struct ResourcePredictor: Sendable {
             ? (sorted[mid - 1] + sorted[mid]) / 2
             : sorted[mid]
         return Int(Double(median) / 6.0 / 1024.0 / 1024.0)
+    }
+
+    private func computeBatteryDrain(_ samples: [PlaybackSample]) -> Double {
+        let sorted = samples.sorted { $0.timestamp < $1.timestamp }
+        guard sorted.count >= 2 else { return 0 }
+        guard let first = sorted.first, let last = sorted.last else { return 0 }
+        let timeSpan = last.timestamp.timeIntervalSince(first.timestamp)
+        guard timeSpan > 60 else { return 0 }
+        let drain = (first.batteryLevel - last.batteryLevel) / (timeSpan / 3600)
+        return max(0, drain * 100)
     }
 
     private func thermalBase(_ state: SystemState.ThermalState) -> Double {

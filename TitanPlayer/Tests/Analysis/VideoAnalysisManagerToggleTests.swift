@@ -65,7 +65,7 @@ final class VideoAnalysisManagerToggleTests: XCTestCase {
         let tex = device.makeTexture(
             descriptor: MTLTextureDescriptor.texture2DDescriptor(
                 pixelFormat: .rgba16Float, width: 16, height: 16, mipmapped: false))!
-        var data = [Float](repeating: 1.0, count: 16 * 16 * 4)
+        let data = [Float](repeating: 1.0, count: 16 * 16 * 4)
         tex.replace(region: MTLRegionMake2D(0, 0, 16, 16),
                     mipmapLevel: 0, withBytes: data,
                     bytesPerRow: 16 * 4 * MemoryLayout<Float>.size)

@@ -41,6 +41,7 @@ final class SynchronizationTests: XCTestCase {
     }
 }
 
+@MainActor
 class MockSynchronizationProvider: SynchronizationProvider {
     var audioTime: TimeInterval
     init(audioTime: TimeInterval) {

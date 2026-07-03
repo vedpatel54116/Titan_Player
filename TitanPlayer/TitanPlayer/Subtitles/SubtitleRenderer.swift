@@ -2,14 +2,25 @@ import Foundation
 import Metal
 
 /// Result of rendering subtitle events at a given time.
-/// The caller (MetalRenderer) owns the pixel buffer after creation
-/// and must deallocate it after uploading to MTLTexture.
-struct SubtitleBitmap {
+/// Automatically frees the pixel buffer when deallocated.
+final class SubtitleBitmap {
     let pixels: UnsafeMutableRawBufferPointer
     let width: Int
     let height: Int
     let bytesPerRow: Int
     let pixelFormat: MTLPixelFormat  // Always .bgra8Unorm
+
+    init(pixels: UnsafeMutableRawBufferPointer, width: Int, height: Int, bytesPerRow: Int, pixelFormat: MTLPixelFormat) {
+        self.pixels = pixels
+        self.width = width
+        self.height = height
+        self.bytesPerRow = bytesPerRow
+        self.pixelFormat = pixelFormat
+    }
+
+    deinit {
+        pixels.deallocate()
+    }
 }
 
 /// Abstracts subtitle rendering backends (libass, SwiftUI fallback, etc.).

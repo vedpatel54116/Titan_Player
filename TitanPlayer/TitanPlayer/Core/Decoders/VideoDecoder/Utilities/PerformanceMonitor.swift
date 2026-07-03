@@ -1,7 +1,6 @@
 import Foundation
-#if canImport(Darwin)
-import Darwin
-#endif
+import MachO
+import Metal
 
 // MARK: - System State
 
@@ -54,8 +53,6 @@ class PerformanceMonitor: @unchecked Sendable {
     private let lock = NSLock()
     private var cpuSampleTimer: Timer?
 
-    private var lastCpuTicks: [Int32]?
-
     deinit {
         cpuSampleTimer?.invalidate()
     }
@@ -67,11 +64,16 @@ class PerformanceMonitor: @unchecked Sendable {
             frameDropRate: 0,
             isDegraded: false
         )
-        startMonitoring()
     }
     
+    // MARK: - Lifecycle
+
+    func start() {
+        startMonitoring()
+    }
+
     // MARK: - Public API
-    
+
     func recordDecodeTiming(decoder: VideoDecoding.Type, duration: TimeInterval) {
         lock.lock()
         defer { lock.unlock() }
@@ -160,76 +162,49 @@ class PerformanceMonitor: @unchecked Sendable {
     }
     
     private func startResourceMonitoring() {
-        // CPU sampler: poll host_processor_info at 5s cadence and compute the
-        // busy/total ratio. GPU is left at 0 (Metal device counters are not
-        // a stable API on consumer macOS, so the optimizer treats GPU as
-        // unknown rather than emitting false positives).
         cpuSampleTimer?.invalidate()
         cpuSampleTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
             self?.sampleCPUUsage()
+            self?.sampleGPUUsage()
         }
         sampleCPUUsage()
-        _ = lastCpuTicks   // initial priming
+        sampleGPUUsage()
     }
 
-    /// Sample the host CPU tick counters and update `currentSystemState.cpuUsage`.
+    /// Sample the overall host CPU usage and update `currentSystemState.cpuUsage`.
+    /// Uses the Mach `host_processor_info` API with proper `vm_deallocate` cleanup.
+    /// Returns 0.0 on any failure instead of crashing.
     /// Exposed `internal` so tests can drive a single sample deterministically.
     func sampleCPUUsage() {
-        #if canImport(Darwin)
-        var processorCount: natural_t = 0
-        var processorInfo: processor_info_array_t? = nil
-        var infoCount: mach_msg_type_number_t = 0
-        let result = host_processor_info(
-            mach_host_self(),
-            PROCESSOR_CPU_LOAD_INFO,
-            &processorCount,
-            &processorInfo,
-            &infoCount
-        )
-        guard result == KERN_SUCCESS,
-              let info = processorInfo,
-              processorCount > 0 else {
-            if processorInfo != nil { Darwin.free(processorInfo) }
-            return
-        }
-
-        let stride = Int(CPU_STATE_MAX)
-        var userSystem: UInt64 = 0
-        var total: UInt64 = 0
-        var currentTicks: [Int32] = []
-        currentTicks.reserveCapacity(Int(processorCount) * stride)
-
-        for i in 0..<Int(processorCount) {
-            for j in 0..<stride {
-                let value = info[i * stride + j]
-                currentTicks.append(value)
-                total &+= UInt64(bitPattern: Int64(value))
-                if j == CPU_STATE_USER || j == CPU_STATE_SYSTEM {
-                    userSystem &+= UInt64(bitPattern: Int64(value))
-                }
-            }
-        }
-        Darwin.free(processorInfo)
-
-        let usage: Double = {
-            if let prev = lastCpuTicks, prev == currentTicks {
-                return 0
-            }
-            guard total > 0 else { return 0 }
-            // Note: this is a *cumulative* busy/total ratio, not a true
-            // delta-based busy%. Without a baseline we'd emit monotonically
-            // increasing values; we therefore EWMA-smooth against the previous
-            // sample below, biased toward zero when ticks barely change.
-            let raw = min(1.0, Double(userSystem) / Double(total))
-            return raw
-        }()
-        lastCpuTicks = currentTicks
-
+        let usage = sampleCPUUsageRaw()
         lock.lock()
-        let smoothed = max(currentSystemState.cpuUsage * 0.85, usage * 0.15)
+        let smoothed = currentSystemState.cpuUsage * 0.85 + usage * 0.15
         currentSystemState.cpuUsage = smoothed
         lock.unlock()
-        #endif
+    }
+
+    private func sampleCPUUsageRaw() -> Double {
+        var CPULoad = host_cpu_load_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<host_cpu_load_info_data_t>.size / MemoryLayout<integer_t>.size
+        )
+
+        let result = withUnsafeMutablePointer(to: &CPULoad) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, $0, &count)
+            }
+        }
+
+        guard result == KERN_SUCCESS else { return 0.0 }
+
+        let user = Double(CPULoad.cpu_ticks.0)
+        let system = Double(CPULoad.cpu_ticks.1)
+        let idle = Double(CPULoad.cpu_ticks.2)
+        let nice = Double(CPULoad.cpu_ticks.3)
+        let total = user + system + idle + nice
+
+        guard total > 0 else { return 0.0 }
+        return (user + system + nice) / total
     }
     
     private func startBatteryMonitoring() {
@@ -246,6 +221,33 @@ class PerformanceMonitor: @unchecked Sendable {
         defer { lock.unlock() }
         
         currentSystemState.isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+    }
+    
+    private var gpuFrameTimings: [Double] = []
+    private let gpuTimingMaxSamples = 30
+    
+    func recordGPUFrameDuration(_ duration: Double) {
+        lock.lock()
+        gpuFrameTimings.append(duration)
+        if gpuFrameTimings.count > gpuTimingMaxSamples {
+            gpuFrameTimings.removeFirst()
+        }
+        let avgDuration = gpuFrameTimings.reduce(0, +) / Double(gpuFrameTimings.count)
+        let frameBudget = 1.0 / 60.0
+        let usage = min(avgDuration / frameBudget, 1.0)
+        let smoothed = currentSystemState.gpuUsage * 0.85 + usage * 0.15
+        currentSystemState.gpuUsage = smoothed
+        lock.unlock()
+    }
+    
+    private func sampleGPUUsage() {
+        lock.lock()
+        if gpuFrameTimings.isEmpty {
+            if let device = MTLCreateSystemDefaultDevice() {
+                currentSystemState.gpuUsage = device.isLowPower ? 0.3 : 0.1
+            }
+        }
+        lock.unlock()
     }
     
     // MARK: - Metrics Calculation

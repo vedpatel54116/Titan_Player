@@ -27,8 +27,14 @@ let package = Package(
                 .product(name: "Libswscale", package: "FFmpegBuild"),
                 .product(name: "Sentry", package: "sentry-cocoa"),
             ],
-            path: "TitanPlayer",
-            exclude: ["Info.plist"],
+			path: "TitanPlayer",
+			exclude: [
+				"Info.plist",
+				"TitanPlayer.entitlements",
+				"TitanPlayer.Direct.entitlements",
+				"Resources/Icon.icns",
+				"Resources/Icon-Placeholder",
+			],
             resources: [
                 .process("Resources/Assets.xcassets"),
                 .process("Resources/Shaders")

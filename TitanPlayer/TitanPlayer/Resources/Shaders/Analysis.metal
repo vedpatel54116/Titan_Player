@@ -1,7 +1,7 @@
 #include <metal_stdlib>
 using namespace metal;
+#include "ShaderTypes.h"
 
-constant uint kHistogramBins   = 256u;
 constant uint kVectorscopeGrid = 256u;
 constant uint kWaveformColumns = 1024u;
 constant uint kWaveformBuckets = 8u;

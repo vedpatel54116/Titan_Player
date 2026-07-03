@@ -13,6 +13,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private var renderPipeline: MTLRenderPipelineState?
     
     private var textureCache: CVMetalTextureCache?
+    private var pixelBufferPool: CVPixelBufferPool?
     
     private var currentHDRMode: HDRMode = .sdr
     private var displayCapabilities: DisplayCapabilities?
@@ -49,6 +50,12 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     
     private let displayDetector = DisplayCapabilityDetector()
     
+    // Fallback state — set when Metal pipeline setup fails so the
+    // renderer can hand control back to AVPlayerLayer-based rendering
+    // instead of showing a black screen or crashing.
+    private(set) var fallbackActive = false
+    var fallbackLayer: AVPlayerLayer?
+    
     private var displayTargets: [String: DisplayRenderTarget] = [:]
     
     private var currentDrawableSize: CGSize = .zero
@@ -64,17 +71,21 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     weak var delegate: MetalRendererDelegate?
     weak var frameStore: FrameStore?
     
-    override init() {
-        let device = MTLCreateSystemDefaultDevice()!
-        let commandQueue = device.makeCommandQueue()!
+    private override init() {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            fatalError("MetalRenderer: MTLCreateSystemDefaultDevice() returned nil — Metal is unavailable")
+        }
+        guard let commandQueue = device.makeCommandQueue() else {
+            fatalError("MetalRenderer: device.makeCommandQueue() returned nil")
+        }
         self.device = device
         self.commandQueue = commandQueue
         super.init()
-        
+
         var cache: CVMetalTextureCache?
         CVMetalTextureCacheCreate(kCFAllocatorDefault, nil, device, nil, &cache)
         textureCache = cache
-        
+
         setupPipelines()
         setupBuffers()
         if let screen = NSScreen.main {
@@ -82,11 +93,24 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         }
     }
 
+    /// Returns `true` if the Metal device is available and `MetalRenderer`
+    /// can be safely instantiated. Call before `MetalRenderer()` to avoid
+    /// crashing on machines without GPU support.
+    static var isAvailable: Bool {
+        MTLCreateSystemDefaultDevice() != nil
+    }
+
     func attach(to view: MTKView) {
         view.delegate = self
         view.colorPixelFormat = .rgba16Float
         view.framebufferOnly = false
         view.preferredFramesPerSecond = 60
+
+        // Configure EDR for HDR content
+        if let layer = view.layer as? CAMetalLayer {
+            layer.wantsExtendedDynamicRangeContent = true
+            layer.colorspace = CGColorSpace(name: CGColorSpace.itur_2020_PQ_EOTF)
+        }
     }
 
     func detach() {
@@ -111,7 +135,10 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         iccProfile = displayDetector.detectICCProfile(for: screen)
         if let caps = displayCapabilities {
             hdrMetadataProcessor.updateDisplayCapabilities(caps)
-            delegate?.renderer(self, didUpdateDisplayCapabilities: caps)
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.delegate?.renderer(self, didUpdateDisplayCapabilities: caps)
+            }
         }
     }
 
@@ -122,7 +149,11 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     }
     
     private func setupPipelines() {
-        guard let library = device.makeDefaultLibrary() else { return }
+        guard let library = MetalShaders.loadLibrary(device: device) else {
+            logger.error("MetalShaders.loadLibrary returned nil — activating fallback rendering")
+            fallbackActive = true
+            return
+        }
         
         if let ycbcrFunction = library.makeFunction(name: "ycbcr_to_rgb") {
             ycbcrPipeline = try? device.makeComputePipelineState(function: ycbcrFunction)
@@ -134,6 +165,12 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         
         let vertexFunction = library.makeFunction(name: "vertexShader")
         let fragmentFunction = library.makeFunction(name: "video_fragment_shader")
+        
+        guard vertexFunction != nil, fragmentFunction != nil else {
+            logger.error("Required shader functions not found — activating fallback rendering")
+            fallbackActive = true
+            return
+        }
         
         let pipelineDescriptor = MTLRenderPipelineDescriptor()
         pipelineDescriptor.vertexFunction = vertexFunction
@@ -148,6 +185,11 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         subtitleDescriptor.fragmentFunction = subtitleFunction
         subtitleDescriptor.colorAttachments[0].pixelFormat = .rgba16Float
         subtitlePipelineState = try? device.makeRenderPipelineState(descriptor: subtitleDescriptor)
+        
+        fallbackActive = renderPipeline == nil || toneMappingPipeline == nil
+        if fallbackActive {
+            logger.warning("Some pipelines failed to compile — Metal rendering degraded")
+        }
     }
     
     private func setupBuffers() {
@@ -175,7 +217,10 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         
         if let caps = displayCapabilities {
             hdrMetadataProcessor.updateDisplayCapabilities(caps)
-            delegate?.renderer(self, didUpdateDisplayCapabilities: caps)
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.delegate?.renderer(self, didUpdateDisplayCapabilities: caps)
+            }
         }
     }
     
@@ -191,7 +236,10 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         }
         
         currentHDRMode = mode
-        delegate?.renderer(self, didDetectHDRMode: mode)
+        Task { @MainActor [weak self] in
+            guard let self = self else { return }
+            self.delegate?.renderer(self, didDetectHDRMode: mode)
+        }
         
         // Start tracking new mode
         switch mode {
@@ -203,7 +251,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
             lastReportedHDRMode = .hdr10
         case .hlg:
             hdrModeStartTime = Date()
-            lastReportedHDRMode = .hlghdr
+            lastReportedHDRMode = .hlg
         }
     }
 
@@ -245,7 +293,15 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         case .hdr10Plus(let meta):
             updateHDRMode(.hdr10(meta.toHDR10Metadata()))
         case .dolbyVision:
-            updateHDRMode(.sdr)
+            let hdr10 = HDR10Metadata(
+                displayPrimaries: (red: SIMD2<Float>(0.708, 0.292), green: SIMD2<Float>(0.170, 0.797), blue: SIMD2<Float>(0.131, 0.046)),
+                whitePoint: SIMD2<Float>(0.3127, 0.3290),
+                maxDisplayLuminance: 1000.0,
+                minDisplayLuminance: 0.001,
+                maxContentLightLevel: 1000.0,
+                maxFrameAverageLightLevel: 400.0
+            )
+            updateHDRMode(.hdr10(hdr10))
         }
         hdrMetadataProcessor.updateMetalRendererUniforms(self)
     }
@@ -255,10 +311,13 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     func addDisplayTarget(stableID: String, layer: CAMetalLayer, capabilities: DisplayCapabilities, iccProfile: ICCProfile) {
         guard displayTargets[stableID] == nil else { return }
         
-        let uniformsBuffer = device.makeBuffer(
+        guard let uniformsBuffer = device.makeBuffer(
             length: MemoryLayout<HDRUniforms>.size,
             options: .storageModeShared
-        )!
+        ) else {
+            logger.error("Failed to allocate HDR uniforms buffer for display target \(stableID, privacy: .public)")
+            return
+        }
         
         var uniforms = HDRUniforms(
             hdrMode: 0,
@@ -394,13 +453,17 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
 
         guard let texture = device.makeTexture(descriptor: descriptor) else { return }
 
+        guard let baseAddress = bitmap.pixels.baseAddress else {
+            logger.error("SubtitleBitmap pixel buffer has nil base address")
+            return
+        }
         texture.replace(
             region: MTLRegion(
                 origin: MTLOrigin(x: 0, y: 0, z: 0),
                 size: MTLSize(width: bitmap.width, height: bitmap.height, depth: 1)
             ),
             mipmapLevel: 0,
-            withBytes: bitmap.pixels.baseAddress!,
+            withBytes: baseAddress,
             bytesPerRow: bitmap.bytesPerRow
         )
 
@@ -423,6 +486,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         
         guard let textures = createTextures(from: pixelBuffer),
               let ycbcrPipeline = ycbcrPipeline else {
+            logger.warning("Failed to create textures from pixel buffer, clearing to black")
             // No valid textures — clear to black
             let desc = createRenderPassDescriptor(drawable: drawable)
             if let enc = commandBuffer.makeRenderCommandEncoder(descriptor: desc) {
@@ -432,6 +496,8 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
             commandBuffer.commit()
             return
         }
+        
+        logger.debug("Texture created from frame: \(textures.y.width, privacy: .public)x\(textures.y.height, privacy: .public)")
         
         let rgbTexture = createRGBTexture(
             width: textures.y.width,
@@ -519,9 +585,6 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private func createTextures(from pixelBuffer: CVPixelBuffer) -> (y: MTLTexture, cbcr: MTLTexture)? {
         guard let cache = textureCache else { return nil }
         
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-        
         var yTextureRef: CVMetalTexture?
         var cbcrTextureRef: CVMetalTexture?
         
@@ -608,7 +671,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
             useDynamicMetadata: useDynamicMetadata ? 1 : 0
         )
         
-        if let metadata = metadata {
+        if metadata != nil {
             switch currentHDRMode {
             case .hdr10(let hdr10Meta):
                 uniforms.hdrMode = 1
@@ -668,6 +731,23 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     }
     
     func draw(in view: MTKView) {
+        if fallbackActive {
+            // Fallback: clear to black — the app should degrade to
+            // AVPlayerLayer-based rendering via compatibility mode.
+            guard let drawable = view.currentDrawable else { return }
+            guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
+            let desc = MTLRenderPassDescriptor()
+            desc.colorAttachments[0].texture = drawable.texture
+            desc.colorAttachments[0].loadAction = .clear
+            desc.colorAttachments[0].clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 1)
+            if let enc = commandBuffer.makeRenderCommandEncoder(descriptor: desc) {
+                enc.endEncoding()
+            }
+            commandBuffer.present(drawable)
+            commandBuffer.commit()
+            return
+        }
+        
         guard let drawable = view.currentDrawable,
               let renderPipeline = renderPipeline,
               let vertexBuffer = vertexBuffer else { return }
@@ -792,6 +872,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     func render(_ frame: VideoFrame) async throws {
         // Store the most recent frame; drawable-driven submission happens
         // in draw(in:) once the next CAMetalDrawable is available.
+        logger.debug("Received video frame for rendering")
         pendingFrame = frame
     }
 
@@ -816,11 +897,24 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         case .hlg:
             updateHDRMode(.hlg)
         case .dolbyVision:
-            updateHDRMode(.sdr)
+            let dvMeta = HDR10Metadata(
+                displayPrimaries: (
+                    red: SIMD2<Float>(0.708, 0.292),
+                    green: SIMD2<Float>(0.170, 0.797),
+                    blue: SIMD2<Float>(0.131, 0.046)
+                ),
+                whitePoint: SIMD2<Float>(0.3127, 0.3290),
+                maxDisplayLuminance: metadata.maxLuminance,
+                minDisplayLuminance: metadata.minLuminance,
+                maxContentLightLevel: metadata.maxLuminance,
+                maxFrameAverageLightLevel: 400
+            )
+            updateHDRMode(.hdr10(dvMeta))
         }
     }
 }
 
+@MainActor
 protocol MetalRendererDelegate: AnyObject {
     func renderer(_ renderer: MetalRenderer, didDetectHDRMode mode: HDRMode)
     func renderer(_ renderer: MetalRenderer, didUpdateDisplayCapabilities caps: DisplayCapabilities)
@@ -829,7 +923,7 @@ protocol MetalRendererDelegate: AnyObject {
 
 extension MetalRenderer {
     static func make() throws -> MetalRenderer {
-        guard MTLCreateSystemDefaultDevice() != nil else {
+        guard isAvailable else {
             throw RendererError.deviceUnavailable
         }
         return MetalRenderer()

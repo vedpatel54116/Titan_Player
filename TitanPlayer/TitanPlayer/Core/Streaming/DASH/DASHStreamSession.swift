@@ -27,23 +27,21 @@ final class DASHStreamSession: @unchecked Sendable {
         let demuxer = FFmpegDemuxer()
         let info = try await demuxer.open(url: url)
 
-        lock.lock()
-        self.demuxer = demuxer
-        self._mediaInfo = info
-        lock.unlock()
+        lock.withLock {
+            self.demuxer = demuxer
+            self._mediaInfo = info
+        }
 
         return info
     }
 
     func nextPacket() async throws -> MediaPacket {
-        let currentDemuxer: FFmpegDemuxer
-        lock.lock()
-        guard let d = self.demuxer else {
-            lock.unlock()
-            throw MediaError(code: .decodingFailed, message: "No active demuxer")
+        let currentDemuxer: FFmpegDemuxer = try lock.withLock {
+            guard let d = self.demuxer else {
+                throw MediaError(code: .decodingFailed, message: "No active demuxer")
+            }
+            return d
         }
-        currentDemuxer = d
-        lock.unlock()
 
         return try await currentDemuxer.nextPacket()
     }
@@ -59,9 +57,7 @@ final class DASHStreamSession: @unchecked Sendable {
     }
 
     func switchQuality(to quality: DASHQuality) async throws {
-        lock.lock()
-        let oldDemuxer = self.demuxer
-        lock.unlock()
+        let oldDemuxer = lock.withLock { self.demuxer }
 
         oldDemuxer?.close()
 
@@ -69,36 +65,41 @@ final class DASHStreamSession: @unchecked Sendable {
         let newDemuxer = FFmpegDemuxer()
         let info = try await newDemuxer.open(url: url)
 
-        lock.lock()
-        self.demuxer = newDemuxer
-        self._mediaInfo = info
-        self.currentQuality = quality
-        lock.unlock()
+        lock.withLock {
+            self.demuxer = newDemuxer
+            self._mediaInfo = info
+            self.currentQuality = quality
+        }
     }
 
     func seek(to time: CMTime) async throws {
-        let currentDemuxer: FFmpegDemuxer
-        lock.lock()
-        guard let d = self.demuxer else {
-            lock.unlock()
-            throw MediaError(code: .decodingFailed, message: "No active demuxer")
+        let currentDemuxer: FFmpegDemuxer = try lock.withLock {
+            guard let d = self.demuxer else {
+                throw MediaError(code: .decodingFailed, message: "No active demuxer")
+            }
+            return d
         }
-        currentDemuxer = d
-        lock.unlock()
 
         try await currentDemuxer.seek(to: time)
     }
 
     func close() {
-        lock.lock()
-        let d = self.demuxer
-        self.demuxer = nil
-        lock.unlock()
+        let d = lock.withLock {
+            let temp = self.demuxer
+            self.demuxer = nil
+            return temp
+        }
 
         d?.close()
     }
 
     private func resolveSegmentURL(for quality: DASHQuality) throws -> URL {
+        if let baseUrl = quality.baseUrl {
+            if baseUrl.hasPrefix("http://") || baseUrl.hasPrefix("https://") {
+                return URL(string: baseUrl)!
+            }
+            return manifestURL.deletingLastPathComponent().appendingPathComponent(baseUrl)
+        }
         return manifestURL
     }
 }

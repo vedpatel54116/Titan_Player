@@ -19,11 +19,11 @@ final class SoftwareTracker {
 
     func startTracking() {
         mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            self?.handleMouseMovement(to: SIMD3<Float>(
-                Float(event.locationInWindow.x) / 1000.0,
-                Float(event.locationInWindow.y) / 1000.0,
-                0.0
-            ))
+            guard let window = event.window else { return event }
+            let frame = window.contentView?.bounds ?? window.frame
+            let normX = (Float(event.locationInWindow.x / frame.width) * 2.0) - 1.0
+            let normY = (Float(event.locationInWindow.y / frame.height) * 2.0) - 1.0
+            self?.handleMouseMovement(to: SIMD3<Float>(normX, normY, 0.0))
             return event
         }
         isTracking = true

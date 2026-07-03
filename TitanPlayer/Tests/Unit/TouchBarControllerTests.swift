@@ -29,14 +29,14 @@ final class TouchBarControllerTests: XCTestCase {
     func testSkipBackwardDecrementsCurrentTime() async {
         let (ctrl, session) = makeController()
         session.currentTime = 30
-        await ctrl.skipBackward()
+        ctrl.skipBackward()
         XCTAssertEqual(session.currentTime, 20, accuracy: 0.001)
     }
 
     func testSkipForwardIncrementsCurrentTime() async {
         let (ctrl, session) = makeController()
         session.currentTime = 30
-        await ctrl.skipForward()
+        ctrl.skipForward()
         XCTAssertEqual(session.currentTime, 40, accuracy: 0.001)
     }
 

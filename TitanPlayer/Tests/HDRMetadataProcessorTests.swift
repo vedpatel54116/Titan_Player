@@ -62,7 +62,7 @@ final class HDRMetadataProcessorTests: XCTestCase {
     
     func testGetProcessedMetadataForTimestamp() {
         let timestamp = CMTime(seconds: 1, preferredTimescale: 600)
-        let metadata = processor.getProcessedMetadata(for: timestamp)
+        _ = processor.getProcessedMetadata(for: timestamp)
     }
     
     func testGetDynamicToneMappingParamsDisabled() {
@@ -256,9 +256,10 @@ final class HDRMetadataProcessorTests: XCTestCase {
         guard status == noErr, let buffer = sampleBuffer else { return nil }
 
         let payload = Data([0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])
-        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(buffer, createIfNecessary: true) as? NSMutableArray else {
+        guard let rawAttachments = CMSampleBufferGetSampleAttachmentsArray(buffer, createIfNecessary: true) else {
             return nil
         }
+        let attachments = (rawAttachments as NSArray).mutableCopy() as! NSMutableArray
         let attachment = NSMutableDictionary()
         attachment.setObject(payload, forKey: "HDR10PlusMetadata" as NSString)
         attachments.add(attachment)
@@ -328,9 +329,10 @@ final class HDRMetadataProcessorTests: XCTestCase {
         bytes += [0x03, 0xE8, 0x00, 0x01, 0x00]
         let payload = Data(bytes)
         
-        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(buffer, createIfNecessary: true) as? NSMutableArray else {
+        guard let rawAttachments = CMSampleBufferGetSampleAttachmentsArray(buffer, createIfNecessary: true) else {
             return nil
         }
+        let attachments = (rawAttachments as NSArray).mutableCopy() as! NSMutableArray
         let attachment = NSMutableDictionary()
         attachment.setObject(NSNumber(value: profile.rawValue), forKey: "DolbyVisionProfile" as NSString)
         attachment.setObject(payload, forKey: "DolbyVisionMetadata" as NSString)

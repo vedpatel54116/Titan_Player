@@ -1,46 +1,7 @@
 #include <metal_stdlib>
 using namespace metal;
 
-struct VertexIn {
-    float2 position;
-    float2 textureCoordinate;
-};
-
-struct VertexOut {
-    float4 position [[position]];
-    float2 textureCoordinate;
-};
-
-struct Uniforms {
-    float brightness;
-    float contrast;
-    float saturation;
-    float hue;
-    float3x3 iccMatrix;
-};
-
-struct HDRUniforms {
-    uint hdrMode;
-    uint isHDRDisplay;
-    float3x3 colorMatrix;
-    float maxLuminance;
-    float minLuminance;
-    float maxContentLightLevel;
-    float maxFrameAverageLightLevel;
-    float kneePoint;
-    float compressionRatio;
-    float saturationScale;
-    float brightnessAdjustment;
-    uint useDynamicMetadata;
-};
-
-struct YCbCrUniforms {
-    float yScale;
-    float yOffset;
-    float cbcrScale;
-    float cbcrOffset;
-    uint isHDR;
-};
+#include "ShaderTypes.h"
 
 kernel void ycbcr_to_rgb(
     texture2d<float, access::read> yTexture [[texture(0)]],
@@ -61,11 +22,23 @@ kernel void ycbcr_to_rgb(
 
     float3 ycbcr = float3(y, cbcr.x - 0.5, cbcr.y - 0.5);
 
-    const float3x3 ycbcrToRGB = float3x3(
-        float3(1.0,     1.0,     1.0),
-        float3(0.0,    -0.344,  1.772),
-        float3(1.402,  -0.714,  0.0)
-    );
+    float3x3 ycbcrToRGB;
+
+    if (uniforms.isHDR == 1) {
+        // BT.2020 YCbCr -> RGB matrix
+        ycbcrToRGB = float3x3(
+            float3(1.164383,  1.164383, 1.164383),
+            float3(0.000000, -0.187326, 2.141772),
+            float3(1.678674, -0.650428, 0.000000)
+        );
+    } else {
+        // BT.601 YCbCr -> RGB matrix (SDR)
+        ycbcrToRGB = float3x3(
+            float3(1.0,     1.0,     1.0),
+            float3(0.0,    -0.344,  1.772),
+            float3(1.402,  -0.714,  0.0)
+        );
+    }
 
     float3 rgb = ycbcrToRGB * ycbcr;
     rgb = clamp(rgb, 0.0, 1.0);

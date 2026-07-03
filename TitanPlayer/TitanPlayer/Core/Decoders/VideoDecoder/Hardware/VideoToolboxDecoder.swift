@@ -80,11 +80,21 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
         return .sampleBuffer(sampleBuffer)
     }
 
+    private struct SessionData: @unchecked Sendable {
+        let session: VTDecompressionSession?
+        let formatDesc: CMVideoFormatDescription?
+        let pool: CVPixelBufferPool?
+    }
+
     private func submitPacket(_ packet: MediaPacket,
                               continuation: CheckedContinuation<CMSampleBuffer, Error>) {
-        let (session, formatDesc, pool): (VTDecompressionSession?, CMVideoFormatDescription?, CVPixelBufferPool?) = lock.withLock {
-            (self.session, self.formatDescription, self.pixelBufferPool)
+        let data = lock.withLock {
+            SessionData(session: self.session, formatDesc: self.formatDescription, pool: self.pixelBufferPool)
         }
+        let session = data.session
+        let formatDesc = data.formatDesc
+        let pool = data.pool
+
         lock.withLock { self.pendingContinuation = continuation }
 
         guard let session = session, let formatDescription = formatDesc else {
@@ -286,7 +296,8 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
             return
         }
 
-        guard let formatDescription = formatDescription else {
+        let formatDescription = lock.withLock { self.formatDescription }
+        guard let formatDescription else {
             continuation.resume(throwing: DecoderError.sessionNotConfigured)
             return
         }

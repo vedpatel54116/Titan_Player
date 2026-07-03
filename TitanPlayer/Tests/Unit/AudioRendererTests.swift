@@ -3,8 +3,9 @@ import XCTest
 
 final class AudioRendererTests: XCTestCase {
     func testProtocolConformance() {
+        func acceptsRenderer(_ r: any AudioRenderer) {}
         let renderer = AVAudioEngineRenderer()
-        XCTAssertTrue(renderer is AudioRenderer)
+        acceptsRenderer(renderer)
     }
     
     func testInitialVolume() {

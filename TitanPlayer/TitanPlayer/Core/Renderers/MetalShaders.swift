@@ -64,9 +64,11 @@ enum MetalShaders {
     private static func locateMetallib(named name: String) -> URL? {
         let file = "\(name).metallib"
         var candidates: [URL] = []
+        #if SWIFT_PACKAGE
         if let m = Bundle.module.url(forResource: name, withExtension: "metallib") {
             candidates.append(m)
         }
+        #endif
         for b in bundleNameURLs() {
             candidates.append(b.appendingPathComponent(file))
             candidates.append(b.appendingPathComponent("Contents/Resources").appendingPathComponent(file))
@@ -188,9 +190,11 @@ enum MetalShaders {
     private static func locateShaderFile(named name: String) -> URL? {
         let file = "\(name).metal"
         var candidates: [URL] = []
+        #if SWIFT_PACKAGE
         if let m = Bundle.module.url(forResource: name, withExtension: "metal") {
             candidates.append(m)
         }
+        #endif
         for b in bundleNameURLs() {
             candidates.append(b.appendingPathComponent(file))
             candidates.append(b.appendingPathComponent("Contents/Resources").appendingPathComponent(file))

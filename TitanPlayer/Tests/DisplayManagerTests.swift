@@ -93,6 +93,7 @@ private final class EmptyDisplayProvider: DisplayProviding {
     func currentScreens() -> [NSScreen] { [] }
 }
 
+@MainActor
 private final class MockScreenDetector: ScreenDetecting {
     var next: [ExternalDisplayConfig]
 
