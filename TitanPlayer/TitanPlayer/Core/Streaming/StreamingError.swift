@@ -5,7 +5,6 @@ enum StreamingError: Error, LocalizedError, Equatable {
     case assetLoadFailed(String)
     case downloadFailed(String)
     case downloadNotSupported(URL)
-    case dashNotSupported(URL)
     case mismatchedExpectedBitrate
 
     var errorDescription: String? {
@@ -18,8 +17,6 @@ enum StreamingError: Error, LocalizedError, Equatable {
             return "Download failed: \(msg)"
         case .downloadNotSupported(let url):
             return "Download not supported for \(url.absoluteString)"
-        case .dashNotSupported(let url):
-            return "DASH playback is not supported in this build (\(url.lastPathComponent))"
         case .mismatchedExpectedBitrate:
             return "Bitrate does not match an available variant."
         }

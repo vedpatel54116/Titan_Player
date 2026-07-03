@@ -34,3 +34,10 @@ Rendering / HDR pipeline design and plan live under `docs/superpowers/specs/`
 and `docs/superpowers/plans/` (see `2026-06-25-metal-hdr-rendering-pipeline-*`).
 Source: `TitanPlayer/TitanPlayer/Core/Renderers/`; Metal shaders:
 `TitanPlayer/TitanPlayer/Resources/Shaders/`.
+
+## TODO(v2)
+
+- **DASH support**: DASH (.mpd) playback was removed in v1 (stub threw
+  `StreamingError.dashNotSupported` on every URL). Implement a real DASH player
+  by reusing the HLS variant-observer pattern (`HLSPlayer` / `HLSCachingAssetLoader`).
+  Track via GitHub issue.

@@ -3,6 +3,7 @@ import MetalKit
 import CoreVideo
 import simd
 import os.log
+import AVKit
 
 class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private let device: MTLDevice

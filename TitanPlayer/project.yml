@@ -13,7 +13,7 @@ configs:
 
 settings:
   base:
-    SWIFT_VERSION: "5.0"
+    SWIFT_VERSION: "5.9"
     ARCHS: ["arm64"]
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ENABLE_TESTABILITY: YES
@@ -38,7 +38,8 @@ settings:
 
 packages:
   FFmpegBuild:
-    path: .build/checkouts/FFmpegBuild
+    url: https://github.com/superuser404notfound/FFmpegBuild
+    from: 1.0.3
     products:
       - FFmpegBuild
       - Libavcodec
@@ -63,21 +64,12 @@ targets:
     settings:
       base:
         INFOPLIST_FILE: TitanPlayer/TitanPlayer/Info.plist
+        xcconfigFile: $(DERIVED_FILE_DIR)/TitanPlayerDeps.xcconfig
         LD_RUNPATH_SEARCH_PATHS:
           - "$(inherited)"
           - "@executable_path/../Frameworks"
-        HEADER_SEARCH_PATHS:
-          - "$(inherited)"
-          - /opt/homebrew/include
         SWIFT_INCLUDE_PATHS:
           - "$(SRCROOT)/TitanPlayer/Sources/CLibAss"
-          - /opt/homebrew/include
-        LIBRARY_SEARCH_PATHS:
-          - "$(inherited)"
-          - /opt/homebrew/lib
-        OTHER_LDFLAGS:
-          - "$(inherited)"
-          - "-lass"
     dependencies:
       - package: FFmpegBuild
         product: FFmpegBuild
@@ -91,6 +83,9 @@ targets:
         product: Libswscale
       - package: Sentry
         product: Sentry
+    preBuildScripts:
+      - name: Resolve libass paths
+        script: bash "${SRCROOT}/scripts/locate-deps.sh"
     postBuildScripts:
       - script: |
           set -euo pipefail

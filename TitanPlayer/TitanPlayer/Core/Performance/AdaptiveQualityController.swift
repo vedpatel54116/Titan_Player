@@ -5,6 +5,8 @@ final class AdaptiveQualityController: @unchecked Sendable {
     private var lastActionTimes: [QualityAction: Date] = [:]
     private let cooldown: TimeInterval = 5.0
     private let decoderSwitchCooldown: TimeInterval = 10.0
+    private let swDecodeEstimator = SWDecodeEstimator()
+    private var lastSWSwitchTime: Date?
 
     init() {}
 
@@ -24,6 +26,9 @@ final class AdaptiveQualityController: @unchecked Sendable {
                 guard Date().timeIntervalSince(lastTime) >= cooldown else { return }
             }
             lastActionTimes[a] = Date()
+            if case .preferHardware(false) = a {
+                lastSWSwitchTime = Date()
+            }
             actions.append(a)
         }
 
@@ -45,14 +50,29 @@ final class AdaptiveQualityController: @unchecked Sendable {
            settings.decoderIsHW {
             add(.preferHardware(false), cooldown: decoderSwitchCooldown)
         } else if cpuHigh && thermalHot && settings.decoderIsHW {
-            add(.preferHardware(false), cooldown: decoderSwitchCooldown)
+            if swDecodeEstimator.shouldPreferSW(
+                codec: "unknown",
+                resolution: settings.resolution,
+                hwDecodeTime: metrics.averageDecodeTime
+            ) {
+                add(.preferHardware(false), cooldown: decoderSwitchCooldown)
+            } else {
+                add(.downscaleRenderTo(.p1080), cooldown: cooldown)
+            }
         } else if mode == .battery, settings.decoderIsHW {
             add(.preferHardware(false), cooldown: decoderSwitchCooldown)
         }
+        let swCooldownSatisfied: Bool = {
+            guard let lastSW = lastSWSwitchTime else { return true }
+            return Date().timeIntervalSince(lastSW) >= decoderSwitchCooldown
+        }()
+
         if mode == .performance,
            !settings.decoderIsHW,
            systemState.thermalState == .nominal,
            !cpuHigh,
+           systemState.cpuUsage < 0.50,
+           swCooldownSatisfied,
            !isOnCooldown(.preferHardware(true)) {
             add(.preferHardware(true), cooldown: decoderSwitchCooldown)
         }
