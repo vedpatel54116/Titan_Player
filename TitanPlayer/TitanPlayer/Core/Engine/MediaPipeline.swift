@@ -11,6 +11,9 @@ class MediaPipeline: ObservableObject {
     
     private var demuxer: MediaDemuxing?
     private var decoder: MediaDecoding?
+
+    /// Expose the active decoder for typed audio-tap wiring without Mirror reflection.
+    internal var activeDecoder: MediaDecoding? { decoder }
     private let timeObserver = TimeObserver()
     private let videoRenderer: VideoRenderer
     weak var synchronizationProvider: SynchronizationProvider?
@@ -25,6 +28,15 @@ class MediaPipeline: ObservableObject {
     var currentTime: Double { timeObserver.currentTime }
     var duration: Double { timeObserver.duration }
     var progress: Double { timeObserver.progress }
+
+    /// Exposes the active demuxer backend for test assertions.
+    var demuxerBackendKind: String {
+        switch demuxer {
+        case is FFmpegDemuxer: return "FFmpeg"
+        case is AVFoundationDemuxer: return "AVFoundation"
+        default: return "none"
+        }
+    }
     
     func setPlaybackRate(_ rate: Float) {
         playbackRate = max(0.25, min(4.0, rate))
