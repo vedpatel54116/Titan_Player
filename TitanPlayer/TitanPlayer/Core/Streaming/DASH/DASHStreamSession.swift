@@ -2,6 +2,8 @@ import Foundation
 import CoreMedia
 import Libavformat
 
+// SAFETY: All mutable state is protected by `lock` (NSLock). Access is
+// serialised, so this type is safe to share across concurrency domains.
 final class DASHStreamSession: @unchecked Sendable {
     let manifest: MPDManifest
     let manifestURL: URL

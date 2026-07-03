@@ -40,6 +40,8 @@ struct DecoderSwitchEvent: Sendable {
 
 // MARK: - Performance Monitor
 
+// SAFETY: All mutable state is protected by `lock` (NSLock). Access is
+// serialised, so this type is safe to share across concurrency domains.
 class PerformanceMonitor: @unchecked Sendable {
     private(set) var currentSystemState: SystemState
     private(set) var recentMetrics: PerformanceMetrics

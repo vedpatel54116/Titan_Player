@@ -6,6 +6,9 @@ import os
 
 // MARK: - VideoToolbox Decoder
 
+// SAFETY: All mutable state is protected by `lock` (OSAllocatedUnfairLock).
+// The VTDecompressionSession callback runs on an internal VideoToolbox
+// thread and only touches state under the lock or via continuation resume.
 final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
     let outputFormat: DecoderOutputFormat = .sampleBuffer
     let capabilities: DecoderCapabilities
@@ -80,6 +83,8 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
         return .sampleBuffer(sampleBuffer)
     }
 
+    // SAFETY: This is a snapshot of lock-protected state, captured and
+    // transferred atomically within `submitPacket`. No concurrent mutation.
     private struct SessionData: @unchecked Sendable {
         let session: VTDecompressionSession?
         let formatDesc: CMVideoFormatDescription?

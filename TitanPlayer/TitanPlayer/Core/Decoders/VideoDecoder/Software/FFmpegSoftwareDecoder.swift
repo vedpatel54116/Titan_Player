@@ -35,6 +35,8 @@ private let _FF_THREAD_FRAME = FF_THREAD_FRAME
 
 // MARK: - FFmpeg Software Decoder
 
+// SAFETY: All mutable state is protected by `lock` (OSAllocatedUnfairLock).
+// All access paths acquire the lock before reading or writing.
 final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
     let outputFormat: DecoderOutputFormat = .pixelBuffer
     let capabilities: DecoderCapabilities

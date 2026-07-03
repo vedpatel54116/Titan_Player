@@ -5,6 +5,9 @@ import Dispatch
 
 /// BS.1770-4 / EBU R128 loudness + true-peak meter. Algorithm verified against
 /// libebur128 (canonical reference at https://github.com/jiixyj/libebur128).
+// SAFETY: Audio processing runs on a serial DispatchQueue. The @MainActor
+// `metering` property is updated via `Task { @MainActor in }`. All other
+// mutable state is accessed only from the serial queue.
 final class LFSAudioMeter: @unchecked Sendable {
     /// 5-tap biquad, Direct Form II (canonical): w[n] = x[n] − a1·v1...a4·v4;
     /// y[n] = b0·w + b1·v1 + b2·v2 + b3·v3 + b4·v4.

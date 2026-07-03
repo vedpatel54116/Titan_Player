@@ -38,7 +38,7 @@ final class AirPlayController: ObservableObject {
     private let monitor: ExternalPlaybackMonitoring
     private let defaultDelay: TimeInterval
     private let subject = PassthroughSubject<Bool, Never>()
-    private var cancellable: AnyCancellable?
+    private nonisolated(unsafe) var cancellable: AnyCancellable?
     private var userOverride: TimeInterval?
 
     init(
