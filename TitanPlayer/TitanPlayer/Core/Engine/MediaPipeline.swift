@@ -5,20 +5,39 @@ import os
 
 @MainActor
 class MediaPipeline: ObservableObject {
-    @Published var playState: PlaybackState = .idle
+    enum PipelinePhase: Equatable {
+        case idle
+        case loading
+        case decoding
+        case paused
+        case stopped
+        case error(String)
+
+        static func == (lhs: PipelinePhase, rhs: PipelinePhase) -> Bool {
+            switch (lhs, rhs) {
+            case (.idle, .idle), (.loading, .loading), (.decoding, .decoding),
+                 (.paused, .paused), (.stopped, .stopped):
+                return true
+            case (.error(let l), .error(let r)):
+                return l == r
+            default:
+                return false
+            }
+        }
+    }
+
+    private(set) var phase: PipelinePhase = .idle
     @Published var mediaInfo: MediaInfo?
     @Published var playbackRate: Float = 1.0
     
-    private var demuxer: MediaDemuxing?
-    private var decoder: MediaDecoding?
+    nonisolated(unsafe) private var demuxer: MediaDemuxing?
+    nonisolated(unsafe) private var decoder: MediaDecoding?
     private let timeObserver = TimeObserver()
-    private let videoRenderer: VideoRenderer
-    weak var synchronizationProvider: SynchronizationProvider?
+    nonisolated(unsafe) private let videoRenderer: VideoRenderer
+    nonisolated(unsafe) weak var synchronizationProvider: SynchronizationProvider?
     var renderer: (any FrameRendering)? { videoRenderer }
 
-    private let pipelineQueue = DispatchQueue(label: "com.titanplayer.pipeline", qos: .userInitiated)
     private let syncTolerance: TimeInterval = 0.04  // 40ms tolerance
-    private let syncSleepInterval: TimeInterval = 0.001  // 1ms sleep when ahead
     private var packetTask: Task<Void, Never>?
     private let logger = Logger(subsystem: "com.titanplayer", category: "MediaPipeline")
     
@@ -31,7 +50,7 @@ class MediaPipeline: ObservableObject {
     }
     
     func openFile(url: URL, adaptiveManager: AdaptiveDecoderManager? = nil) async throws {
-        playState = .loading
+        phase = .loading
         let ext = url.pathExtension.lowercased()
         logger.info("openFile called for: \(url.path, privacy: .public) (ext: \(ext, privacy: .public))")
 
@@ -50,7 +69,7 @@ class MediaPipeline: ObservableObject {
                     try decoder?.configure(for: videoTrack)
                     logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
                 }
-                playState = .paused
+                phase = .paused
                 logger.info("AVFoundation (direct) demuxing completed, state set to paused")
                 return
             } catch let error as MediaError {
@@ -90,7 +109,7 @@ class MediaPipeline: ObservableObject {
                     logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
                 }
                 logger.info("Backend: FFmpeg succeeded for \(ext, privacy: .public)")
-                playState = .paused
+                phase = .paused
                 return
             } catch {
                 logger.warning("Backend: FFmpeg failed for \(ext, privacy: .public), falling back to AVFoundation — \(error.localizedDescription, privacy: .public)")
@@ -112,7 +131,7 @@ class MediaPipeline: ObservableObject {
                 try decoder?.configure(for: videoTrack)
                 logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
             }
-            playState = .paused
+            phase = .paused
             logger.info("AVFoundation (fallback) demuxing completed, state set to paused")
             return
         } catch let error as MediaError {
@@ -123,7 +142,7 @@ class MediaPipeline: ObservableObject {
     }
     
     func openStream(session: DASHStreamSession) async {
-        playState = .loading
+        phase = .loading
 
         do {
             let info = try await session.open()
@@ -137,123 +156,140 @@ class MediaPipeline: ObservableObject {
                 try decoder?.configure(for: videoTrack)
             }
 
-            playState = .paused
+            phase = .paused
         } catch {
-            playState = .error(error.localizedDescription)
+            phase = .error(error.localizedDescription)
         }
     }
     
-    func play() {
-        guard playState == .paused || playState == .idle else { return }
-        playState = .playing
+    func play(currentState: PlaybackState) {
+        phase = .decoding
         timeObserver.startObserving()
         startPacketReading()
     }
     
-    func pause() {
-        guard playState == .playing else { return }
-        playState = .paused
+    func pause(currentState: PlaybackState) {
+        phase = .paused
         timeObserver.stopObserving()
         packetTask?.cancel()
     }
     
     func seek(to time: Double) async {
-        playState = .seeking
         timeObserver.seekTo(time)
         
         let cmTime = CMTime(seconds: time, preferredTimescale: 600)
         try? await demuxer?.seek(to: cmTime)
-        
-        if playState == .seeking {
-            playState = .playing
-        }
     }
     
-    func stop() {
+    func stop(currentState: PlaybackState) {
         packetTask?.cancel()
         timeObserver.stopObserving()
         demuxer?.close()
         decoder?.reset()
-        playState = .idle
+        phase = .stopped
     }
     
     private func startPacketReading() {
         logger.info("Starting packet reading loop")
+        let currentDemuxer = demuxer
+        let currentDecoder = decoder
+        let currentRenderer = videoRenderer
+        let currentSyncProvider = synchronizationProvider
+        let log = logger
         packetTask = Task { [weak self] in
-            guard let self = self else { return }
-            
-            var frameCount = 0
-            while !Task.isCancelled {
-                guard let packet = try? await self.demuxer?.nextPacket() else {
-                    self.logger.info("No more packets available, ending packet reading loop")
-                    break
-                }
-                
-                if let frame = try? await self.decoder?.decode(packet) {
-                    frameCount += 1
-                    if frameCount == 1 {
-                        self.logger.info("First frame decoded successfully")
-                    }
-                    await MainActor.run {
-                        self.processFrame(frame)
-                    }
-                }
-            }
-            self.logger.info("Packet reading loop ended, total frames decoded: \(frameCount)")
-        }
-    }
-    
-    private func shouldDropFrame(_ framePTS: TimeInterval) -> Bool {
-        guard let provider = synchronizationProvider else { return false }
-        let audioTime = provider.audioCurrentTime
-        let drift = framePTS - audioTime
-        // Drop frame if it's behind audio clock beyond tolerance
-        return drift < -syncTolerance
-    }
-    
-    private func sleepIfAhead(framePTS: TimeInterval) {
-        guard let provider = synchronizationProvider else { return }
-        let audioTime = provider.audioCurrentTime
-        let drift = framePTS - audioTime
-        // Sleep if video is ahead of audio beyond tolerance
-        if drift > syncTolerance {
-            let sleepTime = min(drift - syncTolerance, 0.05) // Cap at 50ms
-            Thread.sleep(forTimeInterval: sleepTime)
-        }
-    }
-    
-    private func processFrame(_ frame: MediaFrame) {
-        if case let .video(videoFrame) = frame {
-            let framePTS = CMTimeGetSeconds(videoFrame.timestamp)
-            
-            // Synchronization check
-            if shouldDropFrame(framePTS) {
-                // Frame is behind audio clock, drop it
-                return
-            }
-            
-            sleepIfAhead(framePTS: framePTS)
-            
-            if let provider = synchronizationProvider {
-                let audioTime = provider.audioCurrentTime
-                timeObserver.updateDrift(audioTime: audioTime, videoTime: framePTS)
-            }
-            
-            timeObserver.update(to: videoFrame.timestamp)
-            let currentRenderer = renderer
-            Task { @MainActor in
-                try? await currentRenderer?.render(videoFrame)
-            }
+            Self.runPacketReadingLoop(
+                demuxer: currentDemuxer,
+                decoder: currentDecoder,
+                renderer: currentRenderer,
+                syncProvider: currentSyncProvider,
+                timeObserver: self?.timeObserver,
+                logger: log
+            )
         }
     }
 
-    // Test seam — exposes processFrame to XCTest without making it `public`.
-    func processFrameForTest(_ frame: MediaFrame) {
-        processFrame(frame)
+    /// Nonisolated decode loop — runs entirely off MainActor.
+    /// Only the final sync-check + frame-processing hop touches MainActor.
+    private nonisolated static func runPacketReadingLoop(
+        demuxer: MediaDemuxing?,
+        decoder: MediaDecoding?,
+        renderer: VideoRenderer,
+        syncProvider: SynchronizationProvider?,
+        timeObserver: TimeObserver?,
+        logger: Logger
+    ) {
+        let syncTolerance: TimeInterval = 0.04
+
+        Task { [demuxer, decoder, renderer, syncProvider, timeObserver, logger] in
+            var frameCount = 0
+            while !Task.isCancelled {
+                guard let packet = try? await demuxer?.nextPacket() else {
+                    logger.info("No more packets available, ending packet reading loop")
+                    break
+                }
+
+                guard let frame = try? await decoder?.decode(packet) else { continue }
+                frameCount += 1
+                if frameCount == 1 {
+                    logger.info("First frame decoded successfully")
+                }
+
+                if case let .video(videoFrame) = frame {
+                    let framePTS = CMTimeGetSeconds(videoFrame.timestamp)
+
+                    // Snapshot audio clock on background thread — avoids MainActor hop
+                    let audioTime = syncProvider?.audioCurrentTime ?? 0
+                    let drift = framePTS - audioTime
+
+                    // Drop frame if behind audio clock
+                    if drift < -syncTolerance { continue }
+
+                    // Sleep if ahead of audio clock
+                    if drift > syncTolerance {
+                        let waitTime = min(drift - syncTolerance, 0.05)
+                        let nanoseconds = UInt64(waitTime * 1_000_000_000)
+                        try? await Task.sleep(nanoseconds: nanoseconds)
+                        if Task.isCancelled { break }
+                    }
+
+                    // Single MainActor hop: sync check + time update + render dispatch
+                    await MainActor.run { [logger] in
+                        let freshAudioTime = syncProvider?.audioCurrentTime ?? audioTime
+                        let freshDrift = framePTS - freshAudioTime
+                        if freshDrift < -syncTolerance { return }
+
+                        if let syncProvider {
+                            timeObserver?.updateDrift(audioTime: freshAudioTime, videoTime: framePTS)
+                        }
+                        timeObserver?.update(to: videoFrame.timestamp)
+
+                        Task { @MainActor in
+                            try? await renderer.render(videoFrame)
+                        }
+                    }
+                }
+            }
+            logger.info("Packet reading loop ended, total frames decoded: \(frameCount)")
+        }
     }
-    
+
+    // Test seam — exposes frame processing to XCTest without making it `public`.
+    func processFrameForTest(_ frame: MediaFrame) {
+        guard case let .video(videoFrame) = frame else { return }
+        let framePTS = CMTimeGetSeconds(videoFrame.timestamp)
+        let audioTime = synchronizationProvider?.audioCurrentTime ?? 0
+        timeObserver.updateDrift(audioTime: audioTime, videoTime: framePTS)
+        timeObserver.update(to: videoFrame.timestamp)
+        Task { @MainActor in
+            try? await videoRenderer.render(videoFrame)
+        }
+    }
+
     func shouldDropFrameForTest(_ framePTS: TimeInterval) -> Bool {
-        shouldDropFrame(framePTS)
+        guard let provider = synchronizationProvider else { return false }
+        let audioTime = provider.audioCurrentTime
+        let drift = framePTS - audioTime
+        return drift < -syncTolerance
     }
     
     init(videoRenderer: VideoRenderer) {
