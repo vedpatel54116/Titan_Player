@@ -123,6 +123,10 @@ final class PlaybackSession: ObservableObject {
         fileOpenError = "Could not open \"\(path)\". \(reason)"
     }
 
+    private func showSandboxRestrictionError(path: String) {
+        fileOpenError = "Could not open \"\(path)\". Sandbox restriction: The file is on an external volume and cannot be accessed without using the file picker first. Please use File > Open to select the file."
+    }
+
     private static func describe(error: Error, for url: URL) -> String {
         let name = url.lastPathComponent
         if let playbackError = error as? PlaybackError {
@@ -278,10 +282,20 @@ final class PlaybackSession: ObservableObject {
         // Start accessing security-scoped resource
         // For files dragged from Finder or on external volumes, the URL may not be
         // security-scoped, so startAccessingSecurityScopedResource() may return false.
-        // We log the failure but still attempt to access the file.
         let accessing = accessURL.startAccessingSecurityScopedResource()
         if !accessing {
-            logger.warning("startAccessingSecurityScopedResource() returned false for: \(accessURL.path, privacy: .public). Proceeding with file access attempt.")
+            // Distinguish between picker URLs (non-fatal, picker grants transient access)
+            // and non-picker URLs (drag-drop from external volumes, sandbox restriction)
+            let isOnExternalVolume = accessURL.path.hasPrefix("/Volumes/")
+            if isOnExternalVolume {
+                // Drag-drop from external volume without picker: surface clear error
+                logger.warning("startAccessingSecurityScopedResource() returned false for external volume URL: \(accessURL.path, privacy: .public). Sandbox restriction.")
+                showSandboxRestrictionError(path: url.path)
+                return
+            } else {
+                // User-selected URL from picker: non-fatal, picker grants transient access
+                logger.info("startAccessingSecurityScopedResource() returned false for picker URL: \(accessURL.path, privacy: .public). Proceeding with transient access.")
+            }
         } else {
             logger.info("Security-scoped access started successfully for: \(accessURL.path, privacy: .public)")
         }
@@ -295,7 +309,7 @@ final class PlaybackSession: ObservableObject {
             try await engine.load(url: accessURL)
             logger.info("File loaded successfully into engine: \(accessURL.path, privacy: .public)")
             errorMessage = nil
-            if url.pathExtension.lowercased() == "m3u8" {
+            if url.pathExtension.lowercased() == "m3u8" || engine.compatibilityMode {
                 streaming.load(url: url)
                 streaming.attach(player: engine.avPlayer)
             }
