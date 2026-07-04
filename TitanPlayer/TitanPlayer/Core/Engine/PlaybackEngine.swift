@@ -82,13 +82,76 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         do {
             if url.pathExtension.lowercased() == "mpd" {
                 decoderLogger.info("DASH stream detected, creating DASHPlayer for: \(url.path, privacy: .public)")
-                let dashPlayer = DASHPlayerFactory.player(for: url)
-                let session = try await dashPlayer.streamSession(for: url)
-                decoderLogger.info("DASH stream session opened, opening stream in MediaPipeline")
-                await mediaPipeline?.openStream(session: session)
-                self.mediaInfo = mediaPipeline?.mediaInfo
-                decoderLogger.info("DASH stream loaded, state set to ready")
-                self.state = .ready
+                do {
+                    let dashPlayer = DASHPlayerFactory.player(for: url)
+                    let session = try await dashPlayer.streamSession(for: url)
+                    decoderLogger.info("DASH stream session opened, opening stream in MediaPipeline")
+                    await mediaPipeline?.openStream(session: session)
+                    self.mediaInfo = mediaPipeline?.mediaInfo
+                    decoderLogger.info("DASH stream loaded, state set to ready")
+                    self.state = .ready
+                } catch {
+                    decoderLogger.warning("DASH pipeline failed (\(error.localizedDescription, privacy: .public)), falling back to AVPlayer compatibility mode")
+                    self.mediaPipelineError = error
+                    self.mediaInfo = nil
+                    self.compatibilityMode = true
+                    TelemetryManager.shared.record(.compatibilityModeActivated(
+                        reason: error.localizedDescription,
+                        source: .dash
+                    ))
+
+                    let asset = AVURLAsset(url: url)
+                    let item = AVPlayerItem(asset: asset)
+
+                    let videoTracks = try await asset.loadTracks(withMediaType: .video)
+                    let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+
+                    guard !videoTracks.isEmpty || !audioTracks.isEmpty else {
+                        decoderLogger.error("No playable tracks found in DASH fallback for: \(url.path, privacy: .public)")
+                        throw PlaybackError.noPlayableTracks
+                    }
+
+                    let durationValue = try await asset.load(.duration)
+                    self.duration = CMTimeGetSeconds(durationValue)
+
+                    self.currentLoadURL = url
+                    self.itemStatusCancellable = item.publisher(for: \.status)
+                        .removeDuplicates()
+                        .sink { [weak self] status in
+                            guard let self else { return }
+                            switch status {
+                            case .readyToPlay:
+                                guard self.state != .ready else { return }
+                                self.duration = CMTimeGetSeconds(item.duration)
+                                self.decoderLogger.info("AVPlayerItem.status became .readyToPlay for DASH fallback \(url.path, privacy: .public)")
+                                self.state = .ready
+                            case .failed:
+                                let error = item.error as NSError?
+                                let osStatus = OSStatus(error?.code ?? -1)
+                                self.decoderLogger.error("""
+                                AVPlayerItem.status became .failed for DASH fallback \(url.path, privacy: .public):
+                                  NSError: \(error?.description ?? "nil", privacy: .public)
+                                  UserInfo: \(error?.userInfo.description ?? "nil", privacy: .public)
+                                  OSStatus: \(osStatus)
+                                """)
+                                self.state = .error("Cannot Open: OSStatus \(osStatus)")
+                                self.lastError = .assetLoadFailedWithStatus(
+                                    osStatus,
+                                    error ?? NSError(domain: "PlaybackEngine", code: -1)
+                                )
+                                TelemetryManager.shared.record(.playbackFailed(
+                                    codec: "unknown",
+                                    resolution: "unknown",
+                                    errorCode: "OSStatus \(osStatus)",
+                                    source: .dash
+                                ))
+                            default:
+                                break
+                            }
+                        }
+                    self.player.replaceCurrentItem(with: item)
+                    decoderLogger.info("DASH fallback: AVPlayerItem set on AVPlayer")
+                }
             } else {
                 decoderLogger.info("Creating AVURLAsset for: \(url.path, privacy: .public)")
                 let asset = AVURLAsset(url: url)
@@ -118,26 +181,36 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
                 self.itemStatusCancellable = item.publisher(for: \.status)
                     .removeDuplicates()
                     .sink { [weak self] status in
-                        guard let self, status == .failed else { return }
-                        let error = item.error as NSError?
-                        let osStatus = OSStatus(error?.code ?? -1)
-                        self.decoderLogger.error("""
-                        AVPlayerItem.status became .failed for \(url.path, privacy: .public):
-                          NSError: \(error?.description ?? "nil", privacy: .public)
-                          UserInfo: \(error?.userInfo.description ?? "nil", privacy: .public)
-                          OSStatus: \(osStatus)
-                        """)
-                        self.state = .error("Cannot Open: OSStatus \(osStatus)")
-                        self.lastError = .assetLoadFailedWithStatus(
-                            osStatus,
-                            error ?? NSError(domain: "PlaybackEngine", code: -1)
-                        )
-                        TelemetryManager.shared.record(.playbackFailed(
-                            codec: "unknown",
-                            resolution: "unknown",
-                            errorCode: "OSStatus \(osStatus)",
-                            source: url.pathExtension.lowercased() == "mpd" ? .dash : .local
-                        ))
+                        guard let self else { return }
+                        switch status {
+                        case .readyToPlay:
+                            guard self.state != .ready else { return }
+                            self.duration = CMTimeGetSeconds(item.duration)
+                            self.decoderLogger.info("AVPlayerItem.status became .readyToPlay for \(url.path, privacy: .public)")
+                            self.state = .ready
+                        case .failed:
+                            let error = item.error as NSError?
+                            let osStatus = OSStatus(error?.code ?? -1)
+                            self.decoderLogger.error("""
+                            AVPlayerItem.status became .failed for \(url.path, privacy: .public):
+                              NSError: \(error?.description ?? "nil", privacy: .public)
+                              UserInfo: \(error?.userInfo.description ?? "nil", privacy: .public)
+                              OSStatus: \(osStatus)
+                            """)
+                            self.state = .error("Cannot Open: OSStatus \(osStatus)")
+                            self.lastError = .assetLoadFailedWithStatus(
+                                osStatus,
+                                error ?? NSError(domain: "PlaybackEngine", code: -1)
+                            )
+                            TelemetryManager.shared.record(.playbackFailed(
+                                codec: "unknown",
+                                resolution: "unknown",
+                                errorCode: "OSStatus \(osStatus)",
+                                source: url.pathExtension.lowercased() == "mpd" ? .dash : .local
+                            ))
+                        default:
+                            break
+                        }
                     }
                 self.player.replaceCurrentItem(with: item)
                 decoderLogger.info("AVPlayerItem set successfully")
@@ -162,8 +235,7 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
                     decoderLogger.info("Selected decoder: \(decoderName) for \(url.lastPathComponent, privacy: .public)")
                 }
 
-                decoderLogger.info("Setting state to ready")
-                self.state = .ready
+                decoderLogger.info("Waiting for AVPlayerItem.status to become .readyToPlay")
             }
         } catch {
             decoderLogger.error("Failed to load file: \(error.localizedDescription, privacy: .public)")
@@ -185,9 +257,21 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         audioClock.start()
         player.playImmediately(atRate: playbackRate)
         if let spatialAudioEngine = spatialAudioEngine, spatialAudioEnabled {
-            try? spatialAudioEngine.startEngine()
+            do {
+                try spatialAudioEngine.startEngine()
+            } catch {
+                decoderLogger.error("Spatial audio engine failed to start: \(error.localizedDescription, privacy: .public)")
+                spatialAudioEnabled = false
+                player.volume = 1
+                TelemetryManager.shared.record(.compatibilityModeActivated(
+                    reason: "Spatial audio start failed: \(error.localizedDescription)",
+                    source: currentLoadURL?.pathExtension.lowercased() == "mpd" ? .dash : .local
+                ))
+            }
         }
-        mediaPipeline?.play()
+        if !compatibilityMode {
+            mediaPipeline?.play(currentState: state)
+        }
         state = .playing
     }
 
@@ -195,7 +279,9 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         guard state.canTransition(to: .paused) else { return }
         player.pause()
         audioClock.pause()
-        mediaPipeline?.pause()
+        if !compatibilityMode {
+            mediaPipeline?.pause(currentState: state)
+        }
         state = .paused
     }
 
@@ -204,7 +290,9 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         player.seek(to: .zero)
         audioClock.stop()
         spatialAudioEngine?.stop()
-        mediaPipeline?.stop()
+        if !compatibilityMode {
+            mediaPipeline?.stop(currentState: state)
+        }
         mediaInfo = nil
         itemStatusCancellable = nil
         currentLoadURL = nil
@@ -221,7 +309,9 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
         await player.seek(to: targetTime, toleranceBefore: .zero, toleranceAfter: .zero)
         audioClock.seek(to: time)
         currentTime = time
-        await mediaPipeline?.seek(to: time)
+        if !compatibilityMode {
+            await mediaPipeline?.seek(to: time)
+        }
         if state == .seeking {
             state = previousState == .playing ? .playing : .ready
         }
@@ -250,13 +340,30 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     }
 
     func setSpatialAudioEnabled(_ enabled: Bool) {
-        spatialAudioEnabled = enabled
-        spatialAudioEngine?.spatialAudioEnabled = enabled
+        guard let spatialAudioEngine = spatialAudioEngine else {
+            spatialAudioEnabled = enabled
+            player.volume = enabled ? 0 : 1
+            return
+        }
+
+        spatialAudioEngine.spatialAudioEnabled = enabled
         if enabled {
-            spatialAudioEngine?.enableSpatialAudio()
-            player.volume = 0
+            do {
+                try spatialAudioEngine.startEngine()
+                spatialAudioEnabled = true
+                player.volume = 0
+            } catch {
+                decoderLogger.error("Spatial audio engine failed to start: \(error.localizedDescription, privacy: .public)")
+                spatialAudioEnabled = false
+                spatialAudioEngine.spatialAudioEnabled = false
+                TelemetryManager.shared.record(.compatibilityModeActivated(
+                    reason: "Spatial audio start failed: \(error.localizedDescription)",
+                    source: currentLoadURL?.pathExtension.lowercased() == "mpd" ? .dash : .local
+                ))
+            }
         } else {
-            spatialAudioEngine?.disableSpatialAudio()
+            spatialAudioEngine.disableSpatialAudio()
+            spatialAudioEnabled = false
             player.volume = 1
         }
     }
