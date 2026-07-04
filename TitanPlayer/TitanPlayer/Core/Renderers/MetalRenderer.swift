@@ -3,6 +3,7 @@ import MetalKit
 import CoreVideo
 import simd
 import os.log
+import AVFoundation
 
 class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private let device: MTLDevice
@@ -109,7 +110,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         // Configure EDR for HDR content
         if let layer = view.layer as? CAMetalLayer {
             layer.wantsExtendedDynamicRangeContent = true
-            layer.colorspace = CGColorSpace(name: CGColorSpace.itur_2020_PQ_EOTF)
+            layer.colorspace = CGColorSpace(name: "kCGColorSpaceITUR_2020_PQ_EOTF" as CFString)
         }
     }
 

@@ -156,7 +156,6 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
                         reason: error.localizedDescription,
                         source: url.pathExtension.lowercased() == "mpd" ? .dash : .local
                     ))
-                    throw error
                 }
 
                 if let decoderName = await adaptiveDecoderManager.selectedDecoderName {

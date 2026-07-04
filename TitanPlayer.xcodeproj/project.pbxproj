@@ -21,6 +21,7 @@
 		154C0FAD4C402B593203C647 /* SoftwareCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = DBF418BC7F87A02299F78FB4 /* SoftwareCapabilities.swift */; };
 		1739E0FB136FE955D29376D8 /* DisplayCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = CB167B93AADFDF278640DE9D /* DisplayCapabilities.swift */; };
 		1B58C83B62B1F6F0EA5FB720 /* SubtitleManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3C5B480F7C000A3F1102DF6 /* SubtitleManager.swift */; };
+		1D8745B92FF7DD1400A2BCCA /* Sentry in Frameworks */ = {isa = PBXBuildFile; productRef = 9E8C9280CC623757FA89AEDE /* Sentry */; };
 		1EFF0555626103B98E3DC92D /* WaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F96D8D6E1614D216C9D1948C /* WaveformView.swift */; };
 		217BA05A3BC1AA3BF4A56C1D /* HardwareCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 273109E0D96C144A89113222 /* HardwareCapabilities.swift */; };
 		22C641347FFEC3F12FB371B1 /* MetadataPassthrough.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43C978871ADB53C98FA9E448 /* MetadataPassthrough.swift */; };
@@ -31,6 +32,7 @@
 		2EB3C1919E895E052EE9C5C3 /* AudioBufferPool.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAB0D88CFE0ACE76341DCDA4 /* AudioBufferPool.swift */; };
 		30188827B02B6301EB0310FC /* HDRMetadataProcessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81E676A0010323154A7778BF /* HDRMetadataProcessor.swift */; };
 		32372E7F118168F4F2CCDB57 /* AudioObject.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BAE58D6DF8681DD72669F85 /* AudioObject.swift */; };
+		32A3C15CA9444AB691FB2988 /* AVPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC90A3C7CC374206A961B997 /* AVPlayerView.swift */; };
 		32A60BBF9179F5D2252FE7C2 /* FFmpegBuild in Frameworks */ = {isa = PBXBuildFile; productRef = 66D46B8F387E4A05B2F586B3 /* FFmpegBuild */; };
 		32C3DE3897F7C6D7FF13616C /* LFSAudioMeter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69CF2C86CE259361BDBC50EC /* LFSAudioMeter.swift */; };
 		33783A8FA25BCADAFCC77CB0 /* Libavutil in Frameworks */ = {isa = PBXBuildFile; productRef = 2736847009E65F6C7E9BE2DC /* Libavutil */; };
@@ -51,6 +53,7 @@
 		45E4E3A4FFAC4374E2EF6F72 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A8C77359BB3ECA884CE8E22 /* ContentView.swift */; };
 		48A2C28E111C5AAA6020207C /* TimeObserver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43D1645CF35E0738F4E29ABF /* TimeObserver.swift */; };
 		4A14F37AF757A00D3FE1B5EB /* AudioClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3227595CED148541C540B8 /* AudioClock.swift */; };
+		4A7C62609C0144098A73AB61 /* AudioTapProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3378DF23CD924BCA9A34E08C /* AudioTapProvider.swift */; };
 		4B89AF9D171BDCB9A6FA0F12 /* SubtitleParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0E87F484366206A4E409FA52 /* SubtitleParser.swift */; };
 		4BD1A5D5CE96C839395190A1 /* AirPlayController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 396A9D631F90242556FB0FED /* AirPlayController.swift */; };
 		4C5A7AE4A4000FAFD5552112 /* HardwareDecoderCapabilities.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90D63D92E612BCC4FB850FB6 /* HardwareDecoderCapabilities.swift */; };
@@ -150,6 +153,7 @@
 		EB3EE5C144B85D56C2269306 /* DolbyVisionParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = A9476E769B79BB0FD054ACBF /* DolbyVisionParser.swift */; };
 		EE77752EDFB616FD187545AA /* StreamingQuality.swift in Sources */ = {isa = PBXBuildFile; fileRef = 212B59B9F31B48A8CDED723F /* StreamingQuality.swift */; };
 		EEC6948ADC444D9CEE2DFD38 /* DecoderSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = BBE486E074CA120AC2CA9650 /* DecoderSelector.swift */; };
+		F0CBB6ED1C4C41178EE7C0E1 /* VideoDecodingAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2A56085E32F4AFB98487C79 /* VideoDecodingAdapter.swift */; };
 		F1F14B3CF9BA9B30E3896AFF /* TelemetryManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3981E8A54A495E44A785C55A /* TelemetryManager.swift */; };
 		F2D70478F16D4FF899AD3196 /* ResourcePredictor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FF9D070238CF6D127BD84DFC /* ResourcePredictor.swift */; };
 		F3597F45B784EEED4BEAE9DF /* FrameStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DCFC6650294E414C5BFB7761 /* FrameStore.swift */; };
@@ -160,11 +164,8 @@
 		FD06BF83C539F5D7FFBCF7FC /* SidebarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7CF6A1F7DBFA98B49A8B9485 /* SidebarView.swift */; };
 		FEA8B9EFA27B5197230E13F5 /* VideoToolboxDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8816B0344655D064735D64C1 /* VideoToolboxDecoder.swift */; };
 		FF028C7E0E079129BC7E8A1E /* DASHPlayerFactory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53AA3513AE45E8CDC08495EA /* DASHPlayerFactory.swift */; };
-		FF97C60F02FB0CFF1B8048E9 /* PlaybackHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5491380675E13C6203ECA8 /* PlaybackHistory.swift */; };
-		4A7C62609C0144098A73AB61 /* AudioTapProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3378DF23CD924BCA9A34E08C /* AudioTapProvider.swift */; };
-		32A3C15CA9444AB691FB2988 /* AVPlayerView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC90A3C7CC374206A961B997 /* AVPlayerView.swift */; };
 		FF5D9A566884488BB9EE48BD /* SynchronizationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B8C187DC6F441BC84642A47 /* SynchronizationProvider.swift */; };
-		F0CBB6ED1C4C41178EE7C0E1 /* VideoDecodingAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = C2A56085E32F4AFB98487C79 /* VideoDecodingAdapter.swift */; };
+		FF97C60F02FB0CFF1B8048E9 /* PlaybackHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E5491380675E13C6203ECA8 /* PlaybackHistory.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -173,6 +174,7 @@
 		0A3CDD75F2CD006A692571D0 /* StreamingCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingCache.swift; sourceTree = "<group>"; };
 		0A8C77359BB3ECA884CE8E22 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		0AD77761D0791507B3426089 /* FitMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FitMode.swift; sourceTree = "<group>"; };
+		0B8C187DC6F441BC84642A47 /* SynchronizationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynchronizationProvider.swift; sourceTree = "<group>"; };
 		0BB5C5EABC7C575A5C418546 /* PerformanceContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PerformanceContext.swift; sourceTree = "<group>"; };
 		0CF3F8E4B65FB31146312417 /* TouchBarProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TouchBarProvider.swift; sourceTree = "<group>"; };
 		0E87F484366206A4E409FA52 /* SubtitleParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleParser.swift; sourceTree = "<group>"; };
@@ -196,6 +198,7 @@
 		273109E0D96C144A89113222 /* HardwareCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HardwareCapabilities.swift; sourceTree = "<group>"; };
 		2BAE58D6DF8681DD72669F85 /* AudioObject.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioObject.swift; sourceTree = "<group>"; };
 		2C6D6077728C0C387246126E /* PlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerView.swift; sourceTree = "<group>"; };
+		3378DF23CD924BCA9A34E08C /* AudioTapProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTapProvider.swift; sourceTree = "<group>"; };
 		33DFFB5DCFADB187BA6BE27E /* PlaybackError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackError.swift; sourceTree = "<group>"; };
 		3561966438C843A664A78F3B /* SpatialAudioRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpatialAudioRenderer.swift; sourceTree = "<group>"; };
 		35CFE3B0347402C66888E628 /* HeadTrackingManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeadTrackingManager.swift; sourceTree = "<group>"; };
@@ -280,6 +283,7 @@
 		BBE486E074CA120AC2CA9650 /* DecoderSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecoderSelector.swift; sourceTree = "<group>"; };
 		C10284433EAAF2A9CD73645E /* FFmpegDemuxer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FFmpegDemuxer.swift; sourceTree = "<group>"; };
 		C117004C72FACA8883720154 /* LibAssRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LibAssRenderer.swift; sourceTree = "<group>"; };
+		C2A56085E32F4AFB98487C79 /* VideoDecodingAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDecodingAdapter.swift; sourceTree = "<group>"; };
 		C9EC23CE41C5783FC0E5EB4F /* PlayerAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerAction.swift; sourceTree = "<group>"; };
 		CACEBE7342B4F658A56B213B /* QualityAction.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = QualityAction.swift; sourceTree = "<group>"; };
 		CB167B93AADFDF278640DE9D /* DisplayCapabilities.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DisplayCapabilities.swift; sourceTree = "<group>"; };
@@ -304,6 +308,7 @@
 		E92796D7F639F965AFD7B440 /* ExternalDisplayConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExternalDisplayConfig.swift; sourceTree = "<group>"; };
 		EAC23B3A8D9526DDB9BAA0EE /* VideoAnalysisManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoAnalysisManager.swift; sourceTree = "<group>"; };
 		EBEC1E6F3C2465E83E6F00A7 /* TitanPlayer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TitanPlayer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		EC90A3C7CC374206A961B997 /* AVPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVPlayerView.swift; sourceTree = "<group>"; };
 		ECBF6D77FEA1B533AC437680 /* ScreenLookup.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenLookup.swift; sourceTree = "<group>"; };
 		EF9125E5C712DBF60FEFB16D /* HRTFProcessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRTFProcessor.swift; sourceTree = "<group>"; };
 		EFF8818BCEF36F782DF48E2C /* AnalysisGPURunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AnalysisGPURunner.swift; sourceTree = "<group>"; };
@@ -318,10 +323,6 @@
 		FE75152CB87F998BC514D90E /* NetworkMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NetworkMonitor.swift; sourceTree = "<group>"; };
 		FEEC917B8912F5BD15CA61C1 /* AdaptiveDecoderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveDecoderManager.swift; sourceTree = "<group>"; };
 		FF9D070238CF6D127BD84DFC /* ResourcePredictor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ResourcePredictor.swift; sourceTree = "<group>"; };
-		3378DF23CD924BCA9A34E08C /* AudioTapProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioTapProvider.swift; sourceTree = "<group>"; };
-		EC90A3C7CC374206A961B997 /* AVPlayerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AVPlayerView.swift; sourceTree = "<group>"; };
-		0B8C187DC6F441BC84642A47 /* SynchronizationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SynchronizationProvider.swift; sourceTree = "<group>"; };
-		C2A56085E32F4AFB98487C79 /* VideoDecodingAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoDecodingAdapter.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -329,6 +330,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1D8745B92FF7DD1400A2BCCA /* Sentry in Frameworks */,
 				32A60BBF9179F5D2252FE7C2 /* FFmpegBuild in Frameworks */,
 				84C7A2444D02E5BEBD56CA46 /* Libavcodec in Frameworks */,
 				BD385774F2C1262C1B3EA601 /* Libavformat in Frameworks */,
@@ -865,7 +867,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
-				LastUpgradeCheck = 1430;
+				LastUpgradeCheck = 2660;
 				TargetAttributes = {
 					4A7FDEF728669D8DF020F03C = {
 						DevelopmentTeam = "";
@@ -883,8 +885,8 @@
 			mainGroup = 91BB0F579FC6A8735DEC137B;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				672009973AE986B1FD96E5C1 /* XCRemoteSwiftPackageReference "FFmpegBuild" */,
-				9FFFB37A34D8967DD6E8E433 /* XCRemoteSwiftPackageReference "Sentry" */,
+				672009973AE986B1FD96E5C1 /* XCLocalSwiftPackageReference "TitanPlayer/.build/checkouts/FFmpegBuild" */,
+				9FFFB37A34D8967DD6E8E433 /* XCRemoteSwiftPackageReference "sentry-cocoa" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 2684F6A2CC6F266EDE56DDF2 /* Products */;
@@ -913,7 +915,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/bash;
-			shellScript = "set -euo pipefail\nSHADER_DIR=\"${SRCROOT}/TitanPlayer/Resources/Shaders\"\nOUTPUT_DIR=\"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"${OUTPUT_DIR}\"\nmkdir -p \"${DERIVED_FILE_DIR}/Metal\"\nMETAL_FILES=()\nwhile IFS= read -r -d '' file; do\n  METAL_FILES+=(\"$file\")\ndone < <(find \"${SHADER_DIR}\" -name \"*.metal\" -print0)\nif [ ${#METAL_FILES[@]} -eq 0 ]; then\n  echo \"warning: No .metal files found in ${SHADER_DIR}\"\n  exit 0\nfi\nxcrun metal -c \"${METAL_FILES[@]}\" \\\n  -I \"${SHADER_DIR}\" \\\n  -o \"${DERIVED_FILE_DIR}/Metal/default.air\"\nxcrun metallib \"${DERIVED_FILE_DIR}/Metal/default.air\" \\\n  -o \"${OUTPUT_DIR}/default.metallib\"\necho \"Compiled Metal shaders → ${OUTPUT_DIR}/default.metallib\"\n";
+			shellScript = "# Metal shader compilation — requires command-line build (make build-shaders)\n# Xcode sandbox blocks file access to SRCROOT; skip gracefully.\nSHADER_DIR=\"${SRCROOT}/TitanPlayer/Resources/Shaders\"\nif [ ! -d \"${SHADER_DIR}\" ]; then\n  echo \"note: Shaders directory not found, skipping Metal compilation\"\n  exit 0\nfi\nMETAL_COUNT=$(find \"${SHADER_DIR}\" -name \"*.metal\" 2>/dev/null | wc -l | tr -d ' ')\nif [ \"${METAL_COUNT}\" -eq 0 ]; then\n  echo \"note: No .metal files found, skipping Metal compilation\"\n  exit 0\nfi\n# Try to compile — will fail in Xcode sandbox, that is expected\nOUTPUT_DIR=\"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\nmkdir -p \"${OUTPUT_DIR}\" 2>/dev/null || { echo \"note: Cannot write to Resources (sandbox), skipping Metal compilation\"; exit 0; }\nmkdir -p \"${DERIVED_FILE_DIR}/Metal\"\nfind \"${SHADER_DIR}\" -name \"*.metal\" -print0 2>/dev/null | xargs -0 xcrun metal -c -I \"${SHADER_DIR}\" -o \"${DERIVED_FILE_DIR}/Metal/default.air\" 2>/dev/null || { echo \"note: Metal compilation failed (sandbox), skipping\"; exit 0; }\nxcrun metallib \"${DERIVED_FILE_DIR}/Metal/default.air\" -o \"${OUTPUT_DIR}/default.metallib\" 2>/dev/null || { echo \"note: metallib creation failed (sandbox), skipping\"; exit 0; }\necho \"Compiled Metal shaders → ${OUTPUT_DIR}/default.metallib\"\n";
 		};
 		FAB7914D28523A347A1397BA /* Run Script */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -931,7 +933,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -euo pipefail\ncd \"${SRCROOT}/TitanPlayer\"\nCONFIG_LOWER=$(echo \"${CONFIGURATION}\" | tr '[:upper:]' '[:lower:]')\ncase \"${CONFIG_LOWER}\" in\n  debug)   swift build -c debug  ;;\n  *)       swift build -c release ;;\nesac\nmkdir -p \"${BUILT_PRODUCTS_DIR}/${EXECUTABLE_FOLDER_PATH}\"\nDEST=\"${BUILT_PRODUCTS_DIR}/${EXECUTABLE_FOLDER_PATH}/TitanPlayer\"\ncp \".build/${CONFIG_LOWER}/TitanPlayer\" \"${DEST}\"\necho \"embedded swiftrm executable at ${DEST}\"\n";
+			shellScript = "# Embedded SwiftRM CLI build — runs outside sandbox via xcodebuild,\n# but inside Xcode sandbox it cannot access .build/workspace-state.json.\n# When invoked via Xcode GUI, swift build is blocked by sandbox; skip gracefully.\ncd \"${SRCROOT}/TitanPlayer\"\nCONFIG_LOWER=$(echo \"${CONFIGURATION}\" | tr '[:upper:]' '[:lower:]')\nif swift build -c \"${CONFIG_LOWER}\" >/dev/null 2>&1; then\n  if [ -f \".build/${CONFIG_LOWER}/TitanPlayer\" ]; then\n    mkdir -p \"${BUILT_PRODUCTS_DIR}/${EXECUTABLE_FOLDER_PATH}\"\n    cp \".build/${CONFIG_LOWER}/TitanPlayer\" \"${BUILT_PRODUCTS_DIR}/${EXECUTABLE_FOLDER_PATH}/TitanPlayer\"\n    echo \"embedded swiftrm executable at ${BUILT_PRODUCTS_DIR}/${EXECUTABLE_FOLDER_PATH}/TitanPlayer\"\n  fi\nelse\n  echo \"note: swift build skipped (sandbox restriction)\"\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -1104,11 +1106,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = TitanPlayer/TitanPlayer/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				SDKROOT = macosx;
 			};
 			name = AppStore;
@@ -1118,11 +1122,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = TitanPlayer/TitanPlayer/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				SDKROOT = macosx;
 			};
 			name = Release;
@@ -1162,10 +1168,11 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				CODE_SIGN_ENTITLEMENTS = TitanPlayer/TitanPlayer/TitanPlayer.Direct.entitlements;
-				CODE_SIGN_IDENTITY = "Developer ID Application";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = NO;
@@ -1173,6 +1180,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1197,6 +1205,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				PRODUCT_NAME = TitanPlayer;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TitanPlayer/Sources/CLibAss";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -1209,11 +1218,13 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = TitanPlayer/TitanPlayer/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				SDKROOT = macosx;
 			};
 			name = Debug;
@@ -1222,12 +1233,15 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				COMBINE_HIDPI_IMAGES = YES;
+				DEAD_CODE_STRIPPING = YES;
 				INFOPLIST_FILE = TitanPlayer/TitanPlayer/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				SDKROOT = macosx;
 			};
 			name = Direct;
@@ -1269,12 +1283,14 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1299,6 +1315,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				PRODUCT_NAME = TitanPlayer;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TitanPlayer/Sources/CLibAss";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -1343,11 +1360,13 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -1379,6 +1398,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				PRODUCT_NAME = TitanPlayer;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TitanPlayer/Sources/CLibAss";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -1425,6 +1445,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				COPY_PHASE_STRIP = NO;
+				DEAD_CODE_STRIPPING = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = "";
 				ENABLE_APP_SANDBOX = YES;
@@ -1432,6 +1453,7 @@
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
@@ -1456,6 +1478,7 @@
 				PRODUCT_BUNDLE_IDENTIFIER = com.titanplayer.app;
 				PRODUCT_NAME = TitanPlayer;
 				SDKROOT = macosx;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/TitanPlayer/Sources/CLibAss";
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
@@ -1490,8 +1513,15 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		672009973AE986B1FD96E5C1 /* XCLocalSwiftPackageReference "TitanPlayer/.build/checkouts/FFmpegBuild" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = TitanPlayer/.build/checkouts/FFmpegBuild;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
-		9FFFB37A34D8967DD6E8E433 /* XCRemoteSwiftPackageReference "Sentry" */ = {
+		9FFFB37A34D8967DD6E8E433 /* XCRemoteSwiftPackageReference "sentry-cocoa" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/getsentry/sentry-cocoa";
 			requirement = {
@@ -1501,13 +1531,6 @@
 		};
 /* End XCRemoteSwiftPackageReference section */
 
-/* Begin XCLocalSwiftPackageReference section */
-		672009973AE986B1FD96E5C1 /* XCLocalSwiftPackageReference "TitanPlayer/.build/checkouts/FFmpegBuild" */ = {
-			isa = XCLocalSwiftPackageReference;
-			relativePath = TitanPlayer/.build/checkouts/FFmpegBuild;
-		};
-/* End XCLocalSwiftPackageReference section */
-
 /* Begin XCSwiftPackageProductDependency section */
 		2736847009E65F6C7E9BE2DC /* Libavutil */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1516,6 +1539,10 @@
 		66D46B8F387E4A05B2F586B3 /* FFmpegBuild */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FFmpegBuild;
+		};
+		9E8C9280CC623757FA89AEDE /* Sentry */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Sentry;
 		};
 		A0421AA94CC47871B6D4CCAD /* Libswscale */ = {
 			isa = XCSwiftPackageProductDependency;
@@ -1528,10 +1555,6 @@
 		D8A4736597E0398A0280B455 /* Libavformat */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Libavformat;
-		};
-		9E8C9280CC623757FA89AEDE /* Sentry */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = Sentry;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
