@@ -52,4 +52,42 @@ final class KeyboardShortcutManagerTests: XCTestCase {
         XCTAssertEqual(mgr.binding(for: .togglePlayPause)?.key, "space")
         XCTAssertEqual(mgr.binding(for: .toggleMute)?.key, "m")
     }
+
+    func testRebindPersistsAcrossInstances() {
+        let defaults = UserDefaults(suiteName: "test-rebind-persist-\(UUID())")!
+        let mgr = KeyboardShortcutManager(defaults: defaults)
+        try? mgr.setBinding(.init(action: .togglePlayPause, key: "x"), for: .togglePlayPause)
+        let mgr2 = KeyboardShortcutManager(defaults: defaults)
+        XCTAssertEqual(mgr2.binding(for: .togglePlayPause)?.key, "x")
+    }
+
+    func testConflictRejectionPreservesOriginal() {
+        let defaults = UserDefaults(suiteName: "test-conflict-preserve-\(UUID())")!
+        let mgr = KeyboardShortcutManager(defaults: defaults)
+        let originalKey = mgr.binding(for: .togglePlayPause)?.key
+        XCTAssertThrowsError(try mgr.setBinding(
+            .init(action: .togglePlayPause, key: "m"), for: .togglePlayPause)) { error in
+            XCTAssertEqual((error as NSError).domain, "KeyboardShortcutManager")
+        }
+        XCTAssertEqual(mgr.binding(for: .togglePlayPause)?.key, originalKey)
+        XCTAssertEqual(mgr.binding(for: .toggleMute)?.key, "m")
+    }
+
+    func testResetToDefaults() {
+        let defaults = UserDefaults(suiteName: "test-reset-\(UUID())")!
+        let mgr = KeyboardShortcutManager(defaults: defaults)
+        try? mgr.setBinding(.init(action: .togglePlayPause, key: "x"), for: .togglePlayPause)
+        try? mgr.setBinding(.init(action: .toggleMute, key: "z"), for: .toggleMute)
+        XCTAssertEqual(mgr.binding(for: .togglePlayPause)?.key, "x")
+        XCTAssertEqual(mgr.binding(for: .toggleMute)?.key, "z")
+
+        mgr.resetToDefaults()
+
+        XCTAssertEqual(mgr.binding(for: .togglePlayPause)?.key, "space")
+        XCTAssertEqual(mgr.binding(for: .toggleMute)?.key, "m")
+
+        let mgr2 = KeyboardShortcutManager(defaults: defaults)
+        XCTAssertEqual(mgr2.binding(for: .togglePlayPause)?.key, "space")
+        XCTAssertEqual(mgr2.binding(for: .toggleMute)?.key, "m")
+    }
 }
