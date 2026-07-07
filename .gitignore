@@ -30,6 +30,16 @@ build/
 *.pkg
 *.dmg
 
+# Swift module metadata (build artifacts, not source)
+Probe.abi.json
+Probe.swiftdoc
+Probe.swiftmodule
+Probe.swiftsourceinfo
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+*.abi.json
+
 # Fastlane
 fastlane/report.xml
 fastlane/Preview.html
