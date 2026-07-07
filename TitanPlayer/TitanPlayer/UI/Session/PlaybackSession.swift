@@ -443,7 +443,8 @@ final class PlaybackSession: ObservableObject {
                 identifier.contains("TitanPlayer")
             guard belongsToScene else { return event }
 
-            if let action = router.action(for: event) {
+            if !KeyboardShortcutManager.isRecordingShortcut,
+               let action = router.action(for: event) {
                 dispatcher.dispatch(action)
                 return nil   // consumed
             }
