@@ -150,12 +150,6 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     }
     
     private func setupPipelines() {
-        DispatchQueue.main.async { [weak self] in
-            self?.updateDisplayCapabilitiesSynchronously(for: screen)
-        }
-    }
-    
-    private func setupPipelines() {
         guard let library = MetalShaders.loadLibrary(device: device) else {
             logger.error("MetalShaders.loadLibrary returned nil — activating fallback rendering")
             fallbackActive = true

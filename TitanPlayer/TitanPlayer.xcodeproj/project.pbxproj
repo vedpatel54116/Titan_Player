@@ -253,7 +253,7 @@
 		6B4D8B6C6C392F1CBE9E911D /* NSWindowAccessor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NSWindowAccessor.swift; sourceTree = "<group>"; };
 		6DEA0779795C15FFDA566411 /* SubtitleTypes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleTypes.swift; sourceTree = "<group>"; };
 		6EF06905CA8341C71E404862 /* Reach.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reach.swift; sourceTree = "<group>"; };
-		7030CD276BC3547942B95C32 /* FFmpegBuild */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FFmpegBuild; path = TitanPlayer/.build/checkouts/FFmpegBuild; sourceTree = SOURCE_ROOT; };
+		7030CD276BC3547942B95C32 /* FFmpegBuild */ = {isa = PBXFileReference; lastKnownFileType = folder; name = FFmpegBuild; path = .build/checkouts/FFmpegBuild; sourceTree = SOURCE_ROOT; };
 		7061D88B260AB07067262AE0 /* PlaybackStatsPublisher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlaybackStatsPublisher.swift; sourceTree = "<group>"; };
 		70B148115C23CC639294003E /* AudioMeterBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMeterBar.swift; sourceTree = "<group>"; };
 		714D68480CB917620F542098 /* VectorscopeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VectorscopeView.swift; sourceTree = "<group>"; };
@@ -481,8 +481,7 @@
 				B114FE7AF77C00ABF47F81A6 /* Telemetry */,
 				866C7724954132F67E763DEC /* UI */,
 			);
-			name = TitanPlayer;
-			path = TitanPlayer/TitanPlayer;
+			path = TitanPlayer;
 			sourceTree = "<group>";
 		};
 		2F026D0580BD7497F1DC65BE /* Shortcuts */ = {
@@ -604,8 +603,7 @@
 			children = (
 				9D07F991BFC1FADA0327B8BB /* Secrets.xcconfig */,
 			);
-			name = Config;
-			path = TitanPlayer/Config;
+			path = Config;
 			sourceTree = "<group>";
 		};
 		71510028C093F5E715B000E1 /* Cache */ = {

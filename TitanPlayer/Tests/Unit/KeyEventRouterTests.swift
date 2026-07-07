@@ -201,6 +201,67 @@ final class KeyEventRouterTests: XCTestCase {
         XCTAssertNil(result)
     }
 
+    // MARK: - Text-field focus passthrough
+
+    /// When an NSTextView is first responder (e.g. user is typing in a
+    /// search box or rename field), the router must return nil so the key
+    /// event passes through to the text system.
+    func testLetterMWithTextViewFirstResponderReturnsNil() {
+        let mgr = makeManager()
+        let router = KeyEventRouter(shortcutManager: mgr)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 200),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 200))
+        window.contentView?.addSubview(textView)
+        window.makeFirstResponder(textView)
+
+        let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: 0, windowNumber: window.windowNumber, context: nil,
+            characters: "m", charactersIgnoringModifiers: "m",
+            isARepeat: false, keyCode: 46
+        )!
+
+        let result = withLayout(qwertyProvider()) {
+            router.action(for: event)
+        }
+        XCTAssertNil(result, "Should not dispatch when NSTextView is first responder")
+    }
+
+    /// When an NSTextField is being edited (its field editor is an
+    /// NSTextView), the router must return nil.
+    func testLetterMWithTextFieldEditingReturnsNil() {
+        let mgr = makeManager()
+        let router = KeyEventRouter(shortcutManager: mgr)
+
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 200, height: 200),
+            styleMask: [.titled, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+        window.contentView?.addSubview(textField)
+        window.makeFirstResponder(textField)
+
+        let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: 0, windowNumber: window.windowNumber, context: nil,
+            characters: "m", charactersIgnoringModifiers: "m",
+            isARepeat: false, keyCode: 46
+        )!
+
+        let result = withLayout(qwertyProvider()) {
+            router.action(for: event)
+        }
+        XCTAssertNil(result, "Should not dispatch when NSTextField field editor is active")
+    }
+
     // MARK: - Custom bindings
 
     func testCustomBindingRespected() {
@@ -235,3 +296,20 @@ private struct FakeKeyboardLayoutProvider: KeyboardLayoutProviding {
         mapping[keyCode]
     }
 }
+
+// MARK: - Manual QA (if automated tests cannot fully verify)
+
+/// The automated tests above exercise the first-responder guard with real
+/// NSWindow/NSTextView/NSTextField instances.  For a full regression check,
+/// perform the following manual steps:
+///
+/// 1. Open the Library window (Cmd+L) and click into the search field.
+/// 2. Type "vlm" into the search field.  Expected: the literal text "vlm"
+///    appears and NO subtitle toggle, mute toggle, or library-window
+///    shortcut fires.
+/// 3. Click outside the text field (e.g. on the player view) so the text
+///    field loses first responder.
+/// 4. Press "m" — expected: mute toggles.
+/// 5. Press "v" — expected: subtitles toggle.
+/// 6. Press Cmd+L — expected: a new Library window opens.
+/// 7. Repeat in the main window's rename/relabel fields (if any).

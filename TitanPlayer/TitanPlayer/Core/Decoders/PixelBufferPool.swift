@@ -43,7 +43,10 @@ final class PixelBufferPool {
         
         guard status == kCVReturnSuccess, let createdPool = newPool else {
             logger.error("Failed to create pixel buffer pool: \(status)")
-            return createFallbackPool(width: width, height: height)
+            if let fallback = createFallbackPool(width: width, height: height) {
+                return fallback
+            }
+            fatalError("PixelBufferPool: unable to create any pixel buffer pool for \(width)x\(height)")
         }
         
         pool = createdPool
@@ -83,7 +86,7 @@ final class PixelBufferPool {
         poolAttributes = nil
     }
     
-    private func createFallbackPool(width: Int, height: Int) -> CVPixelBufferPool {
+    private func createFallbackPool(width: Int, height: Int) -> CVPixelBufferPool? {
         let attrs: NSDictionary = [
             kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
             kCVPixelBufferWidthKey: width,
@@ -99,12 +102,7 @@ final class PixelBufferPool {
             return createdPool
         }
         
-        var pixelBuffer: CVPixelBuffer?
-        CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange, attrs as CFDictionary, &pixelBuffer)
-        
-        var fallbackPool: CVPixelBufferPool?
-        CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attrs as CFDictionary, &fallbackPool)
-        
-        return fallbackPool ?? (pixelBuffer as AnyObject as! CVPixelBufferPool)
+        logger.warning("Fallback pool creation also failed for \(width)x\(height)")
+        return nil
     }
 }

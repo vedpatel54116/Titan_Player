@@ -1,6 +1,7 @@
 import Foundation
 import CoreMedia
 import Combine
+import os.log
 
 class TimeObserver: ObservableObject {
     @Published var currentTime: Double = 0
@@ -9,6 +10,7 @@ class TimeObserver: ObservableObject {
     @Published var audioVideoDrift: TimeInterval = 0
     private var driftLogStartTime: Date?
     private let driftLogDuration: TimeInterval = 5.0
+    private let logger = Logger(subsystem: "com.titanplayer", category: "Sync")
     
     func startObserving() {
         driftLogStartTime = nil
@@ -37,7 +39,7 @@ class TimeObserver: ObservableObject {
         
         let elapsed = Date().timeIntervalSince(driftLogStartTime!)
         if elapsed <= driftLogDuration {
-            print("[Sync] Drift: \(String(format: "%.3f", drift * 1000))ms (audio: \(String(format: "%.3f", audioTime))s, video: \(String(format: "%.3f", videoTime))s)")
+            logger.debug("[Sync] Drift: \(String(format: "%.3f", drift * 1000))ms (audio: \(String(format: "%.3f", audioTime))s, video: \(String(format: "%.3f", videoTime))s)")
         }
     }
     
