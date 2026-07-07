@@ -8,6 +8,8 @@ struct PreferencesWindow: Scene {
             TabView {
                 TelemetryPreferencesView()
                     .tabItem { Label("Privacy", systemImage: "lock") }
+                ShortcutsPreferencesView()
+                    .tabItem { Label("Shortcuts", systemImage: "command") }
             }
         }
     }
