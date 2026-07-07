@@ -2,10 +2,14 @@ import SwiftUI
 import AppKit
 
 struct ShortcutsPreferencesView: View {
-    @State private var manager = KeyboardShortcutManager()
+    @State private var manager: KeyboardShortcutManager?
     @State private var recordingAction: PlayerAction? = nil
     @State private var conflictError: String? = nil
     @State private var eventMonitor: Any? = nil
+
+    private var resolvedManager: KeyboardShortcutManager {
+        manager ?? KeyboardShortcutManager()
+    }
 
     private let groups: [(String, [PlayerAction])] = [
         ("Playback", [
@@ -41,17 +45,22 @@ struct ShortcutsPreferencesView: View {
 
             Section {
                 Button("Reset to Defaults") {
-                    manager.resetToDefaults()
+                    resolvedManager.resetToDefaults()
                 }
             }
         }
         .padding()
         .frame(width: 480, height: 520)
+        .onAppear {
+            if manager == nil {
+                manager = KeyboardShortcutManager()
+            }
+        }
     }
 
     @ViewBuilder
     private func shortcutRow(for action: PlayerAction) -> some View {
-        let binding = manager.binding(for: action)
+        let binding = resolvedManager.binding(for: action)
         let display = binding.map {
             ShortcutDisplayFormatter.displayString(key: $0.key, modifiers: $0.modifiers)
         } ?? "None"
@@ -116,7 +125,7 @@ struct ShortcutsPreferencesView: View {
 
             let candidate = KeyBinding(action: action, key: keyName, modifiers: mods)
             do {
-                try manager.setBinding(candidate, for: action)
+                try resolvedManager.setBinding(candidate, for: action)
                 stopRecording()
             } catch {
                 conflictError = error.localizedDescription
