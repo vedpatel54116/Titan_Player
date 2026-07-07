@@ -32,95 +32,40 @@ final class PlaybackSession: ObservableObject {
     @Published var subtitlePosition: SubtitlePosition = .bottom
     @Published var subtitleBackgroundOpacity: Float = 0.6
 
-    @Published var currentlyAccessedURL: URL?
+    var currentlyAccessedURL: URL? { bookmarkStore.currentlyAccessedURL }
+
     @Published var fileOpenError: String?
     @Published var errorMessage: String?
     @Published var initializationError: String?
-
-    private let bookmarkDefaultsKey = "SecurityScopedBookmarks"
 
     @Published var fitMode: FitMode = .fit
     @Published var fitModeOverride: FitMode? = nil
 
     let frameStore = FrameStore()
+    let bookmarkStore = BookmarkStore()
     let shortcutManager = KeyboardShortcutManager()
     var analysis: VideoAnalysisManager?
-    let displayManager: DisplayManager
-    let airPlayController: AirPlayController
+    let displayCoordinator: DisplayCoordinator
     let streaming: StreamingManager
     let performance: PerformanceOptimizer
 
     private var keyMonitorToken: Any?
-    private var secondaryDisplayWindow: ExternalDisplayWindow?
 
     private let engine: PlaybackEngine
     var avPlayer: AVPlayer { engine.avPlayer }
     private let subtitleManager = SubtitleManager()
     private var cancellables = Set<AnyCancellable>()
 
-    // MARK: - Security-Scoped Bookmark Management
-
-    func createBookmark(for url: URL) {
-        do {
-            let bookmarkData = try url.bookmarkData(
-                options: .withSecurityScope,
-                includingResourceValuesForKeys: nil,
-                relativeTo: nil
-            )
-            var bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data] ?? [:]
-            bookmarks[url.path] = bookmarkData
-            UserDefaults.standard.set(bookmarks, forKey: bookmarkDefaultsKey)
-        } catch {
-            NSLog("[BookmarkManager] Failed to create bookmark for %@: %@", url.path, error.localizedDescription)
-        }
-    }
-
-    func resolveBookmark(for path: String) -> URL? {
-        guard let bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data],
-              let bookmarkData = bookmarks[path] else {
-            return nil
-        }
-
-        var isStale = false
-        do {
-            let url = try URL(
-                resolvingBookmarkData: bookmarkData,
-                options: .withSecurityScope,
-                relativeTo: nil,
-                bookmarkDataIsStale: &isStale
-            )
-
-            if isStale {
-                NSLog("[BookmarkManager] Stale bookmark detected for path: %@", path)
-                removeBookmark(for: path)
-                return nil
-            }
-
-            return url
-        } catch {
-            NSLog("[BookmarkManager] Failed to resolve bookmark for %@: %@", path, error.localizedDescription)
-            removeBookmark(for: path)
-            return nil
-        }
-    }
-
-    func removeBookmark(for path: String) {
-        var bookmarks = UserDefaults.standard.dictionary(forKey: bookmarkDefaultsKey) as? [String: Data] ?? [:]
-        bookmarks.removeValue(forKey: path)
-        UserDefaults.standard.set(bookmarks, forKey: bookmarkDefaultsKey)
-        NSLog("[BookmarkManager] Removed stale bookmark for path: %@", path)
-    }
-
-    func stopAccessingCurrentResource() {
-        if let currentURL = currentlyAccessedURL {
-            currentURL.stopAccessingSecurityScopedResource()
-            NSLog("[BookmarkManager] Stopped accessing: %@", currentURL.path)
-            currentlyAccessedURL = nil
-        }
+    private func stopAccessingCurrentResource() {
+        bookmarkStore.stopAccessing()
     }
 
     private func showFileAccessError(path: String, reason: String) {
         fileOpenError = "Could not open \"\(path)\". \(reason)"
+    }
+
+    private func showSandboxRestrictionError(path: String) {
+        fileOpenError = "Could not open \"\(path)\". Sandbox restriction: The file is on an external volume and cannot be accessed without using the file picker first. Please use File > Open to select the file."
     }
 
     private static func describe(error: Error, for url: URL) -> String {
@@ -209,8 +154,12 @@ final class PlaybackSession: ObservableObject {
         self.engine = PlaybackEngine(
             videoRenderer: engineVideoRenderer
         )
-        self.displayManager = DisplayManager()
-        self.airPlayController = AirPlayController(monitor: engine.avPlayer)
+        let displayManager = DisplayManager()
+        let airPlayController = AirPlayController(monitor: engine.avPlayer)
+        self.displayCoordinator = DisplayCoordinator(
+            displayManager: displayManager,
+            airPlayController: airPlayController
+        )
         self.streaming = StreamingManager.makeDefault()
         let perf = PerformanceOptimizer.makeDefault()
         if let metal = resolvedVideoRenderer as? MetalRenderer {
@@ -228,7 +177,13 @@ final class PlaybackSession: ObservableObject {
         installAudioTap()
         setupBindings()
         installKeyMonitor()
-        installDisplayBindings()
+        displayCoordinator.rendererProvider = { [weak self] in
+            self?.renderer as? MetalRenderer
+        }
+        displayCoordinator.audioDelayHandler = { [weak self] in
+            self?.setAudioDelay($0)
+        }
+        displayCoordinator.installDisplayBindings()
         SessionLocator.shared.attach(self)
         NotificationCenter.default.addObserver(
             self,
@@ -258,18 +213,22 @@ final class PlaybackSession: ObservableObject {
     }
 
     func openFile(url: URL) async {
-        logger.info("openFile called with URL: \(url.path, privacy: .public)")
+        #if DEBUG
+        logger.debug("openFile called with URL: \(url.path, privacy: .public)")
+        #endif
 
         // Stop accessing previous resource if any
         stopAccessingCurrentResource()
 
         // Create and store bookmark for new URL
-        createBookmark(for: url)
+        bookmarkStore.createBookmark(for: url)
 
         // Resolve bookmark to get fresh URL, with fallback to original URL
         var accessURL = url
-        if let resolvedURL = resolveBookmark(for: url.path) {
-            logger.info("Bookmark resolved successfully for: \(resolvedURL.path, privacy: .public)")
+        if let resolvedURL = bookmarkStore.resolveBookmark(for: url.path) {
+            #if DEBUG
+            logger.debug("Bookmark resolved successfully for: \(resolvedURL.path, privacy: .public)")
+            #endif
             accessURL = resolvedURL
         } else {
             logger.warning("Failed to resolve bookmark for: \(url.path, privacy: .public), falling back to original URL")
@@ -278,24 +237,35 @@ final class PlaybackSession: ObservableObject {
         // Start accessing security-scoped resource
         // For files dragged from Finder or on external volumes, the URL may not be
         // security-scoped, so startAccessingSecurityScopedResource() may return false.
-        // We log the failure but still attempt to access the file.
-        let accessing = accessURL.startAccessingSecurityScopedResource()
+        let accessing = bookmarkStore.startAccessing(accessURL)
         if !accessing {
-            logger.warning("startAccessingSecurityScopedResource() returned false for: \(accessURL.path, privacy: .public). Proceeding with file access attempt.")
-        } else {
-            logger.info("Security-scoped access started successfully for: \(accessURL.path, privacy: .public)")
+            // Distinguish between picker URLs (non-fatal, picker grants transient access)
+            // and non-picker URLs (drag-drop from external volumes, sandbox restriction)
+            let isOnExternalVolume = accessURL.path.hasPrefix("/Volumes/")
+            if isOnExternalVolume {
+                // Drag-drop from external volume without picker: surface clear error
+                logger.warning("startAccessingSecurityScopedResource() returned false for external volume URL: \(accessURL.path, privacy: .public). Sandbox restriction.")
+                showSandboxRestrictionError(path: url.path)
+                return
+            } else {
+                // User-selected URL from picker: non-fatal, picker grants transient access
+                #if DEBUG
+                logger.debug("startAccessingSecurityScopedResource() returned false for picker URL: \(accessURL.path, privacy: .public). Proceeding with transient access.")
+                #endif
+            }
         }
-
-        // Track the accessed URL for cleanup when playback stops or app closes
-        currentlyAccessedURL = accessURL
 
         // Load into engine
         do {
-            logger.info("Loading file into engine: \(accessURL.path, privacy: .public)")
+            #if DEBUG
+            logger.debug("Loading file into engine: \(accessURL.path, privacy: .public)")
+            #endif
             try await engine.load(url: accessURL)
-            logger.info("File loaded successfully into engine: \(accessURL.path, privacy: .public)")
+            #if DEBUG
+            logger.debug("File loaded successfully into engine: \(accessURL.path, privacy: .public)")
+            #endif
             errorMessage = nil
-            if url.pathExtension.lowercased() == "m3u8" {
+            if url.pathExtension.lowercased() == "m3u8" || engine.compatibilityMode {
                 streaming.load(url: url)
                 streaming.attach(player: engine.avPlayer)
             }
@@ -319,7 +289,7 @@ final class PlaybackSession: ObservableObject {
             logger.error("Failed to load file into engine: \(error.localizedDescription, privacy: .public)")
             stopAccessingCurrentResource()
             let message = Self.describe(error: error, for: url)
-            showFileAccessError(path: url.path, reason: error.localizedDescription)
+            showFileAccessError(path: url.path, reason: message)
             errorMessage = message
         }
     }
@@ -369,15 +339,16 @@ final class PlaybackSession: ObservableObject {
     }
 
     func stop() {
+        engine.teardown()
         engine.stop()
         subtitleManager.clear()
         performance.observe(settings: nil)
         stopAccessingCurrentResource()
-        secondaryDisplayWindow?.close()
-        secondaryDisplayWindow = nil
+        displayCoordinator.stop()
     }
 
     @objc private func applicationWillTerminate() {
+        engine.teardown()
         stopAccessingCurrentResource()
     }
 
@@ -431,148 +402,16 @@ final class PlaybackSession: ObservableObject {
             .assign(to: &$currentSubtitleBitmap)
     }
 
-    private func installDisplayBindings() {
-        displayManager.$activeDisplay
-            .compactMap { $0 }
-            .removeDuplicates()
-            .sink { [weak self] config in
-                guard let self else { return }
-                guard let screen = ScreenLookup.screen(forStableID: config.stableID),
-                      let metal = self.renderer as? MetalRenderer else { return }
-                metal.updateDisplayCapabilitiesAsynchronously(for: screen)
-            }
-            .store(in: &cancellables)
-
-        displayManager.events
-            .sink { [weak self] event in
-                guard let self else { return }
-                switch event {
-                case .connected(let config):
-                    self.handleDisplayConnected(config)
-                case .disconnected(let stableID):
-                    self.handleDisplayDisconnected(stableID)
-                case .primaryChanged(let config):
-                    self.handlePrimaryChanged(config)
-                case .refreshed:
-                    break
-                }
-            }
-            .store(in: &cancellables)
-
-        airPlayController.$currentAudioDelayOffset
-            .removeDuplicates()
-            .sink { [weak self] offset in
-                self?.engine.setAudioDelay(offset)
-            }
-            .store(in: &cancellables)
-    }
-
-    private func handleDisplayConnected(_ config: ExternalDisplayConfig) {
-        guard config.stableID != displayManager.primaryDisplay?.stableID else { return }
-        guard let metal = renderer as? MetalRenderer else { return }
-        guard let screen = ScreenLookup.screen(forStableID: config.stableID) else { return }
-
-        let detector = DisplayCapabilityDetector()
-        let caps = detector.detectCapabilities(for: screen)
-        let icc = detector.detectICCProfile(for: screen)
-
-        guard let device = MTLCreateSystemDefaultDevice() else { return }
-        let window = ExternalDisplayWindow(device: device)
-        window.show(on: screen)
-        secondaryDisplayWindow = window
-
-        metal.addDisplayTarget(
-            stableID: config.stableID,
-            layer: window.metalLayer,
-            capabilities: caps,
-            iccProfile: icc
-        )
-    }
-
-    private func handleDisplayDisconnected(_ stableID: String) {
-        guard let metal = renderer as? MetalRenderer else { return }
-        metal.removeDisplayTarget(stableID: stableID)
-
-        secondaryDisplayWindow?.close()
-        secondaryDisplayWindow = nil
-    }
-
-    private func handlePrimaryChanged(_ config: ExternalDisplayConfig) {
-        if let screen = ScreenLookup.screen(forStableID: config.stableID),
-           let window = NSApp.keyWindow ?? NSApp.windows.first {
-            window.setFrameOrigin(screen.frame.origin)
-        }
-
-        guard let metal = renderer as? MetalRenderer else { return }
-
-        if let oldSecondary = displayManager.secondaryDisplay {
-            metal.removeDisplayTarget(stableID: oldSecondary.stableID)
-            secondaryDisplayWindow?.close()
-            secondaryDisplayWindow = nil
-        }
-
-        if let secondary = displayManager.secondaryDisplay,
-           let screen = ScreenLookup.screen(forStableID: secondary.stableID) {
-            let detector = DisplayCapabilityDetector()
-            let caps = detector.detectCapabilities(for: screen)
-            let icc = detector.detectICCProfile(for: screen)
-
-            guard let device = MTLCreateSystemDefaultDevice() else { return }
-            let window = ExternalDisplayWindow(device: device)
-            window.show(on: screen)
-            secondaryDisplayWindow = window
-
-            metal.addDisplayTarget(
-                stableID: secondary.stableID,
-                layer: window.metalLayer,
-                capabilities: caps,
-                iccProfile: icc
-            )
-        }
-    }
-
     /// Wire the audio tap via direct dependency injection through
     /// `AudioTapProvider` (no Mirror reflection). The closure feeds
     /// decoded PCM frames to both the loudness meter and the spatial
     /// audio engine.
     private func installAudioTap() {
         guard let meter = analysis?.audioMeter else { return }
-        engine.audioTap = { [weak self] frame in
-            Task { @MainActor in
-                meter.consume(frame: frame)
-                if let spatialEngine = self?.engine.activeSpatialAudioEngine,
-                   spatialEngine.isRunning {
-                    let buf = Self.makePCMBuffer(from: frame)
-                    spatialEngine.processAudioBuffer(buf)
-                }
-            }
+        let router = AudioTapRouter(meter: meter) { [weak self] in
+            self?.engine.activeSpatialAudioEngine
         }
-    }
-
-    /// Convert a decoded `AudioFrame` into an `AVAudioPCMBuffer` suitable
-    /// for feeding into `AudioEngine.processAudioBuffer(_:)`.
-    private nonisolated static func makePCMBuffer(from frame: AudioFrame) -> AVAudioPCMBuffer {
-        let ch  = frame.format.channels
-        let rate = frame.format.sampleRate
-        let format = AVAudioFormat(standardFormatWithSampleRate: Double(rate),
-                                   channels: AVAudioChannelCount(ch))!
-        let total = frame.buffer.count
-        let frames = total / ch
-        let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: UInt32(frames))!
-        buf.frameLength = UInt32(frames)
-        let src = frame.buffer
-        if frame.format.isInterleaved {
-            for c in 0..<ch {
-                let dst = buf.floatChannelData![c]
-                for i in 0..<frames { dst[i] = src[i * ch + c] }
-            }
-        } else {
-            for c in 0..<ch {
-                let dst = buf.floatChannelData![c]
-                for i in 0..<frames { dst[i] = src[c * frames + i] }
-            }
-        }
-        return buf
+        engine.audioTap = router.tapClosure
     }
 
     private func installKeyMonitor() {
@@ -589,6 +428,7 @@ final class PlaybackSession: ObservableObject {
             openFile:         { TitanCommands.openFileUsingPanel(session: self) }
         )
         let dispatcher = PlayerActionDispatcher(session: self, sideEffects: side)
+        let router = KeyEventRouter(shortcutManager: shortcutManager)
 
         keyMonitorToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
@@ -603,29 +443,11 @@ final class PlaybackSession: ObservableObject {
                 identifier.contains("TitanPlayer")
             guard belongsToScene else { return event }
 
-            let keyName = Self.keyString(for: event)
-            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            for action in PlayerAction.allCases {
-                guard let binding = self.shortcutManager.binding(for: action) else { continue }
-                if binding.key == keyName && binding.modifiers == mods {
-                    dispatcher.dispatch(action)
-                    return nil
-                }
+            if let action = router.action(for: event) {
+                dispatcher.dispatch(action)
+                return nil   // consumed
             }
-            return event
-        }
-    }
-
-    private static func keyString(for event: NSEvent) -> String {
-        switch event.specialKey {
-        case .leftArrow:  return "leftarrow"
-        case .rightArrow: return "rightarrow"
-        case .upArrow:    return "uparrow"
-        case .downArrow:  return "downarrow"
-        default:
-            let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
-            if chars == " " { return "space" }
-            return chars
+            return event   // not consumed
         }
     }
 }

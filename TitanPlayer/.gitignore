@@ -1,2 +1,6 @@
 .build/
 .swiftpm/
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+*.abi.json

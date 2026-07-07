@@ -38,6 +38,9 @@ let package = Package(
             resources: [
                 .process("Resources/Assets.xcassets"),
                 .process("Resources/Shaders")
+            ],
+            swiftSettings: [
+                .define("TITAN_VERBOSE_LOGGING", .when(configuration: .debug))
             ]
         ),
         .testTarget(

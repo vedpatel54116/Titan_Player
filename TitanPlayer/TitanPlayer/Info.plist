@@ -55,7 +55,6 @@
 	<string>$(NSHUMANREADABLECOPYRIGHT)</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>TitanPlayer uses the microphone only when you explicitly enable audio capture. Audio is processed locally and never leaves your Mac.</string>
-	<key>SentryDSN</key>
-	<string>YOUR_SENTRY_DSN_HERE</string>
+
 </dict>
 </plist>

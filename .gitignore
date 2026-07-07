@@ -17,6 +17,12 @@ TitanPlayer.xcodeproj/xcshareddata/xcschemes/TitanPlayerUITests.xcscheme
 xcuserdata/
 *.xcuserdatamodel/
 
+# Swift module metadata (build artifacts, not source)
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+*.abi.json
+
 # Build artifacts
 DerivedData/
 build/
@@ -29,3 +35,6 @@ fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/**/*.png
 fastlane/test_output
+
+# Secrets (never commit)
+TitanPlayer/Config/Secrets.xcconfig

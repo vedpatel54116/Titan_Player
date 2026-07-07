@@ -11,20 +11,21 @@ struct KeyListenerView: NSViewRepresentable {
     }
 
     func makeNSView(context: Context) -> KeyCaptureView {
+        let router = KeyEventRouter(shortcutManager: session.shortcutManager)
         let view = KeyCaptureView()
         view.dispatcher = dispatcher
-        view.shortcutManager = session.shortcutManager
+        view.router = router
         return view
     }
 
     func updateNSView(_ nsView: KeyCaptureView, context: Context) {
-        nsView.shortcutManager = session.shortcutManager
+        nsView.router = KeyEventRouter(shortcutManager: session.shortcutManager)
     }
 }
 
 final class KeyCaptureView: NSView {
     var dispatcher: PlayerActionDispatcher?
-    var shortcutManager: KeyboardShortcutManager?
+    var router: KeyEventRouter?
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -39,32 +40,14 @@ final class KeyCaptureView: NSView {
     }
 
     override func keyDown(with event: NSEvent) {
-        guard let mgr = shortcutManager, let dispatcher else {
+        guard let router, let dispatcher else {
             super.keyDown(with: event)
             return
         }
-        let keyName = keyString(for: event)
-        let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-        for action in PlayerAction.allCases {
-            guard let binding = mgr.binding(for: action) else { continue }
-            if binding.key == keyName && binding.modifiers == mods {
-                dispatcher.dispatch(action)
-                return
-            }
+        if let action = router.action(for: event) {
+            dispatcher.dispatch(action)
+            return
         }
         super.keyDown(with: event)
-    }
-
-    private func keyString(for event: NSEvent) -> String {
-        switch event.specialKey {
-        case .leftArrow:  return "leftarrow"
-        case .rightArrow: return "rightarrow"
-        case .upArrow:    return "uparrow"
-        case .downArrow:  return "downarrow"
-        default:
-            let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
-            if chars == " " { return "space" }
-            return chars
-        }
     }
 }

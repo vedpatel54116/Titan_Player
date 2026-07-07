@@ -13,7 +13,7 @@ final class PlaybackPipelineTests: XCTestCase {
 
         try await pipeline.openFile(url: testURL)
 
-        XCTAssertNotEqual(pipeline.playState, .idle)
+        XCTAssertNotEqual(pipeline.phase, .idle)
         XCTAssertGreaterThan(pipeline.duration, 0)
     }
 
@@ -22,13 +22,13 @@ final class PlaybackPipelineTests: XCTestCase {
         let testURL = Bundle(for: type(of: self)).url(forResource: "test", withExtension: "mp4")!
 
         try await pipeline.openFile(url: testURL)
-        pipeline.play()
+        pipeline.play(currentState: .ready)
 
-        XCTAssertEqual(pipeline.playState, .playing)
+        XCTAssertEqual(pipeline.phase, .decoding)
 
-        pipeline.pause()
+        pipeline.pause(currentState: .playing)
 
-        XCTAssertEqual(pipeline.playState, .paused)
+        XCTAssertEqual(pipeline.phase, .paused)
     }
 
     func testPipelineSeek() async throws {
@@ -36,7 +36,7 @@ final class PlaybackPipelineTests: XCTestCase {
         let testURL = Bundle(for: type(of: self)).url(forResource: "test", withExtension: "mp4")!
 
         try await pipeline.openFile(url: testURL)
-        pipeline.play()
+        pipeline.play(currentState: .ready)
 
         await pipeline.seek(to: 5.0)
 
@@ -48,9 +48,9 @@ final class PlaybackPipelineTests: XCTestCase {
         let testURL = Bundle(for: type(of: self)).url(forResource: "test", withExtension: "mp4")!
 
         try await pipeline.openFile(url: testURL)
-        pipeline.play()
-        pipeline.stop()
+        pipeline.play(currentState: .ready)
+        pipeline.stop(currentState: .playing)
 
-        XCTAssertEqual(pipeline.playState, .idle)
+        XCTAssertEqual(pipeline.phase, .stopped)
     }
 }
