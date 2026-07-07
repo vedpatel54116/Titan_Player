@@ -428,6 +428,7 @@ final class PlaybackSession: ObservableObject {
             openFile:         { TitanCommands.openFileUsingPanel(session: self) }
         )
         let dispatcher = PlayerActionDispatcher(session: self, sideEffects: side)
+        let router = KeyEventRouter(shortcutManager: shortcutManager)
 
         keyMonitorToken = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self else { return event }
@@ -442,29 +443,11 @@ final class PlaybackSession: ObservableObject {
                 identifier.contains("TitanPlayer")
             guard belongsToScene else { return event }
 
-            let keyName = Self.keyString(for: event)
-            let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            for action in PlayerAction.allCases {
-                guard let binding = self.shortcutManager.binding(for: action) else { continue }
-                if binding.key == keyName && binding.modifiers == mods {
-                    dispatcher.dispatch(action)
-                    return nil
-                }
+            if let action = router.action(for: event) {
+                dispatcher.dispatch(action)
+                return nil   // consumed
             }
-            return event
-        }
-    }
-
-    private static func keyString(for event: NSEvent) -> String {
-        switch event.specialKey {
-        case .leftArrow:  return "leftarrow"
-        case .rightArrow: return "rightarrow"
-        case .upArrow:    return "uparrow"
-        case .downArrow:  return "downarrow"
-        default:
-            let chars = event.charactersIgnoringModifiers?.lowercased() ?? ""
-            if chars == " " { return "space" }
-            return chars
+            return event   // not consumed
         }
     }
 }
