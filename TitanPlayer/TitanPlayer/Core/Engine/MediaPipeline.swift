@@ -30,12 +30,16 @@ class MediaPipeline: ObservableObject {
     @Published var mediaInfo: MediaInfo?
     @Published var playbackRate: Float = 1.0
     
-    nonisolated(unsafe) private var demuxer: MediaDemuxing?
-    nonisolated(unsafe) private var decoder: MediaDecoding?
+    private var demuxer: MediaDemuxing?
+    private var decoder: MediaDecoding?
     private let timeObserver = TimeObserver()
-    nonisolated(unsafe) private let videoRenderer: VideoRenderer
+    private let videoRenderer: VideoRenderer
     nonisolated(unsafe) weak var synchronizationProvider: SynchronizationProvider?
     var renderer: (any FrameRendering)? { videoRenderer }
+
+    @Published private(set) var rendererDegraded = false
+    private let renderFailureLock = OSAllocatedUnfairLock<Int>(initialState: 0)
+    private let rendererDegradedThreshold = 5
 
     private let syncTolerance: TimeInterval = 0.04  // 40ms tolerance
     private var packetTask: Task<Void, Never>?
@@ -51,16 +55,24 @@ class MediaPipeline: ObservableObject {
     
     func openFile(url: URL, adaptiveManager: AdaptiveDecoderManager? = nil) async throws {
         phase = .loading
+        renderFailureLock.withLock { $0 = 0 }
+        rendererDegraded = false
         let ext = url.pathExtension.lowercased()
-        logger.info("openFile called for: \(url.path, privacy: .public) (ext: \(ext, privacy: .public))")
+        #if DEBUG
+        logger.debug("openFile called for: \(url.path, privacy: .public) (ext: \(ext, privacy: .public))")
+        #endif
 
         switch Self.backend(for: ext) {
         case .avFoundationDirect:
             // Standard container formats — skip FFmpeg probing entirely
-            logger.info("Backend: AVFoundation (direct) for \(ext, privacy: .public)")
+            #if DEBUG
+            logger.debug("Backend: AVFoundation (direct) for \(ext, privacy: .public)")
+            #endif
             let avDemuxer = AVFoundationDemuxer()
             do {
-                logger.info("Starting AVFoundation demuxing for: \(url.path, privacy: .public)")
+                #if DEBUG
+                logger.debug("Starting AVFoundation demuxing for: \(url.path, privacy: .public)")
+                #endif
                 let info = try await avDemuxer.open(url: url)
                 self.mediaInfo = info
                 timeObserver.duration = info.duration.seconds
@@ -68,10 +80,14 @@ class MediaPipeline: ObservableObject {
                 decoder = AVFoundationDecoder()
                 if let videoTrack = info.videoTracks.first {
                     try decoder?.configure(for: videoTrack)
-                    logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+                    #if DEBUG
+                    logger.debug("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+                    #endif
                 }
                 phase = .paused
-                logger.info("AVFoundation (direct) demuxing completed, state set to paused")
+                #if DEBUG
+                logger.debug("AVFoundation (direct) demuxing completed, state set to paused")
+                #endif
                 return
             } catch let error as MediaError {
                 let detailed = "\(error.message) — \(ext.uppercased()) file: \(url.lastPathComponent)"
@@ -81,14 +97,20 @@ class MediaPipeline: ObservableObject {
 
         case .ffmpegPreferred:
             // Containers where FFmpeg may have better demuxing — try FFmpeg, fall back to AVFoundation
-            logger.info("Backend: attempting FFmpeg for \(ext, privacy: .public)")
+            #if DEBUG
+            logger.debug("Backend: attempting FFmpeg for \(ext, privacy: .public)")
+            #endif
             let probeDemuxer = FFmpegDemuxer()
             do {
-                logger.info("Starting FFmpeg demuxing for: \(url.path, privacy: .public)")
+                #if DEBUG
+                logger.debug("Starting FFmpeg demuxing for: \(url.path, privacy: .public)")
+                #endif
                 let info = try await probeDemuxer.open(url: url)
                 self.mediaInfo = info
                 timeObserver.duration = info.duration.seconds
-                logger.info("FFmpeg demuxing successful, \(info.videoTracks.count, privacy: .public) video track(s), \(info.audioTracks.count, privacy: .public) audio track(s)")
+                #if DEBUG
+                logger.debug("FFmpeg demuxing successful, \(info.videoTracks.count, privacy: .public) video track(s), \(info.audioTracks.count, privacy: .public) audio track(s)")
+                #endif
 
                 if let videoTrack = info.videoTracks.first, let manager = adaptiveManager {
                     try await manager.configure(for: videoTrack)
@@ -97,18 +119,26 @@ class MediaPipeline: ObservableObject {
                     }
                     demuxer = probeDemuxer
                     decoder = VideoDecodingAdapter(decoder: activeDecoder)
-                    logger.info("Adaptive decoder configured for video track")
+                    #if DEBUG
+                    logger.debug("Adaptive decoder configured for video track")
+                    #endif
                 } else {
                     demuxer = probeDemuxer
                     decoder = FFmpegDecoder()
-                    logger.info("FFmpeg decoder configured")
+                    #if DEBUG
+                    logger.debug("FFmpeg decoder configured")
+                    #endif
                 }
 
                 if let videoTrack = info.videoTracks.first {
                     try decoder?.configure(for: videoTrack)
-                    logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+                    #if DEBUG
+                    logger.debug("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+                    #endif
                 }
-                logger.info("Backend: FFmpeg succeeded for \(ext, privacy: .public)")
+                #if DEBUG
+                logger.debug("Backend: FFmpeg succeeded for \(ext, privacy: .public)")
+                #endif
                 phase = .paused
                 return
             } catch {
@@ -118,10 +148,14 @@ class MediaPipeline: ObservableObject {
 
         case .avFoundationFallback:
             // Fallback: use AVFoundation
-            logger.info("Backend: AVFoundation (fallback) for \(ext, privacy: .public)")
+            #if DEBUG
+            logger.debug("Backend: AVFoundation (fallback) for \(ext, privacy: .public)")
+            #endif
             let avDemuxer = AVFoundationDemuxer()
             do {
-                logger.info("Starting AVFoundation (fallback) demuxing for: \(url.path, privacy: .public)")
+                #if DEBUG
+                logger.debug("Starting AVFoundation (fallback) demuxing for: \(url.path, privacy: .public)")
+                #endif
                 let info = try await avDemuxer.open(url: url)
                 self.mediaInfo = info
                 timeObserver.duration = info.duration.seconds
@@ -129,10 +163,14 @@ class MediaPipeline: ObservableObject {
                 decoder = AVFoundationDecoder()
                 if let videoTrack = info.videoTracks.first {
                     try decoder?.configure(for: videoTrack)
-                    logger.info("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+                    #if DEBUG
+                    logger.debug("Decoder configured for video track: \(videoTrack.codec, privacy: .public)")
+                    #endif
                 }
                 phase = .paused
-                logger.info("AVFoundation (fallback) demuxing completed, state set to paused")
+                #if DEBUG
+                logger.debug("AVFoundation (fallback) demuxing completed, state set to paused")
+                #endif
                 return
             } catch let error as MediaError {
                 let detailed = "\(error.message) — \(ext.uppercased()) file: \(url.lastPathComponent)"
@@ -144,6 +182,8 @@ class MediaPipeline: ObservableObject {
     
     func openStream(session: DASHStreamSession) async {
         phase = .loading
+        renderFailureLock.withLock { $0 = 0 }
+        rendererDegraded = false
 
         do {
             let info = try await session.open()
@@ -179,7 +219,11 @@ class MediaPipeline: ObservableObject {
         timeObserver.seekTo(time)
         
         let cmTime = CMTime(seconds: time, preferredTimescale: 600)
-        try? await demuxer?.seek(to: cmTime)
+        do {
+            try await demuxer?.seek(to: cmTime)
+        } catch {
+            logger.warning("Demuxer seek failed: \(error.localizedDescription, privacy: .public)")
+        }
     }
     
     func stop(currentState: PlaybackState) {
@@ -187,11 +231,15 @@ class MediaPipeline: ObservableObject {
         timeObserver.stopObserving()
         demuxer?.close()
         decoder?.reset()
+        renderFailureLock.withLock { $0 = 0 }
+        rendererDegraded = false
         phase = .stopped
     }
     
     private func startPacketReading() {
-        logger.info("Starting packet reading loop")
+        #if DEBUG
+        logger.debug("Starting packet reading loop")
+        #endif
         let currentDemuxer = demuxer
         let currentDecoder = decoder
         let currentRenderer = videoRenderer
@@ -204,6 +252,8 @@ class MediaPipeline: ObservableObject {
                 renderer: currentRenderer,
                 syncProvider: currentSyncProvider,
                 timeObserver: self?.timeObserver,
+                onRenderFail: { [weak self] error in self?.didRenderFail(error) },
+                onRenderSuccess: { [weak self] in self?.didRenderSucceed() },
                 logger: log
             )
         }
@@ -217,22 +267,42 @@ class MediaPipeline: ObservableObject {
         renderer: VideoRenderer,
         syncProvider: SynchronizationProvider?,
         timeObserver: TimeObserver?,
+        onRenderFail: @escaping @Sendable (Error) -> Void,
+        onRenderSuccess: @escaping @Sendable () -> Void,
         logger: Logger
     ) {
         let syncTolerance: TimeInterval = 0.04
 
-        Task { [demuxer, decoder, renderer, syncProvider, timeObserver, logger] in
+        Task { [demuxer, decoder, renderer, syncProvider, timeObserver, onRenderFail, onRenderSuccess, logger] in
             var frameCount = 0
             while !Task.isCancelled {
-                guard let packet = try? await demuxer?.nextPacket() else {
-                    logger.info("No more packets available, ending packet reading loop")
+                let packet: MediaPacket?
+                do {
+                    packet = try await demuxer?.nextPacket()
+                } catch {
+                    logger.warning("Demuxer nextPacket failed: \(error.localizedDescription, privacy: .public)")
+                    break
+                }
+                guard let packet else {
+                    #if DEBUG
+                    logger.debug("No more packets available, ending packet reading loop")
+                    #endif
                     break
                 }
 
-                guard let frame = try? await decoder?.decode(packet) else { continue }
+                let decodedFrame: MediaFrame?
+                do {
+                    decodedFrame = try await decoder?.decode(packet)
+                } catch {
+                    logger.warning("Decoder failed: \(error.localizedDescription, privacy: .public)")
+                    continue
+                }
+                guard let frame = decodedFrame else { continue }
                 frameCount += 1
                 if frameCount == 1 {
-                    logger.info("First frame decoded successfully")
+                    #if DEBUG
+                    logger.debug("First frame decoded successfully")
+                    #endif
                 }
 
                 if case let .video(videoFrame) = frame {
@@ -249,6 +319,7 @@ class MediaPipeline: ObservableObject {
                     if drift > syncTolerance {
                         let waitTime = min(drift - syncTolerance, 0.05)
                         let nanoseconds = UInt64(waitTime * 1_000_000_000)
+                        // try? intentional: Task.sleep throws on cancellation which is handled by the isCancelled check below
                         try? await Task.sleep(nanoseconds: nanoseconds)
                         if Task.isCancelled { break }
                     }
@@ -265,12 +336,19 @@ class MediaPipeline: ObservableObject {
                         timeObserver?.update(to: videoFrame.timestamp)
 
                         Task { @MainActor in
-                            try? await renderer.render(videoFrame)
+                            do {
+                                try await renderer.render(videoFrame)
+                                onRenderSuccess()
+                            } catch {
+                                onRenderFail(error)
+                            }
                         }
                     }
                 }
             }
-            logger.info("Packet reading loop ended, total frames decoded: \(frameCount)")
+            #if DEBUG
+            logger.debug("Packet reading loop ended, total frames decoded: \(frameCount)")
+            #endif
         }
     }
 
@@ -282,7 +360,12 @@ class MediaPipeline: ObservableObject {
         timeObserver.updateDrift(audioTime: audioTime, videoTime: framePTS)
         timeObserver.update(to: videoFrame.timestamp)
         Task { @MainActor in
-            try? await videoRenderer.render(videoFrame)
+            do {
+                try await videoRenderer.render(videoFrame)
+                self.didRenderSucceed()
+            } catch {
+                self.didRenderFail(error)
+            }
         }
     }
 
@@ -293,6 +376,26 @@ class MediaPipeline: ObservableObject {
         return drift < -syncTolerance
     }
     
+    private nonisolated func didRenderFail(_ error: Error) {
+        let count = renderFailureLock.withLock { value in
+            value += 1
+            return value
+        }
+        let threshold = rendererDegradedThreshold
+        logger.warning("Renderer failed (\(count)/\(threshold)): \(error.localizedDescription, privacy: .public)")
+        if count >= threshold {
+            Task { @MainActor in
+                guard !self.rendererDegraded else { return }
+                self.rendererDegraded = true
+                logger.warning("Renderer marked degraded after \(count) consecutive failures")
+            }
+        }
+    }
+
+    private nonisolated func didRenderSucceed() {
+        renderFailureLock.withLock { $0 = 0 }
+    }
+
     init(videoRenderer: VideoRenderer) {
         self.videoRenderer = videoRenderer
     }

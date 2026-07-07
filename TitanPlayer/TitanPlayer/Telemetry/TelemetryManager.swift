@@ -1,10 +1,12 @@
 import Foundation
 import SwiftUI
+import OSLog
 import Sentry
 
 @MainActor
 final class TelemetryManager: ObservableObject, TelemetryProviding {
     static let shared = TelemetryManager()
+    private let logger = Logger(subsystem: "com.titanplayer", category: "Telemetry")
     
     @AppStorage("titanplayer.telemetry.consented") private var consented = false
     @AppStorage("titanplayer.telemetry.hasPrompted") private var hasPrompted = false
@@ -15,11 +17,38 @@ final class TelemetryManager: ObservableObject, TelemetryProviding {
     var needsConsentPrompt: Bool { !hasPrompted }
     
     private init() {
-        self.dsn = Bundle.main.infoDictionary?["SentryDSN"] as? String ?? ""
+        self.dsn = Self.resolveDSN()
+    }
+    
+    private static func resolveDSN() -> String {
+        if let bundleDSN = Bundle.main.object(forInfoDictionaryKey: "SentryDSN") as? String,
+           !bundleDSN.isEmpty {
+            return bundleDSN
+        }
+        if let envDSN = ProcessInfo.processInfo.environment["SENTRY_DSN"], !envDSN.isEmpty {
+            return envDSN
+        }
+        return ""
     }
     
     func initialize() {
-        guard consented, !dsn.isEmpty else { return }
+        guard consented else { return }
+        
+        let placeholder = "your_real_dsn_here"
+        let isPlaceholder = dsn.isEmpty || dsn.localizedCaseInsensitiveContains(placeholder)
+        
+        #if DEBUG
+        if isPlaceholder {
+            logger.debug("Sentry DSN not configured — skipping init in Debug build")
+            return
+        }
+        #else
+        if isPlaceholder || dsn.isEmpty {
+            logger.warning("Sentry DSN missing or still placeholder in Release — Sentry disabled")
+            return
+        }
+        #endif
+        
         SentrySDK.start { options in
             options.dsn = self.dsn
             options.tracesSampleRate = 0.2

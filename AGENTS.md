@@ -34,3 +34,20 @@ Rendering / HDR pipeline design and plan live under `docs/superpowers/specs/`
 and `docs/superpowers/plans/` (see `2026-06-25-metal-hdr-rendering-pipeline-*`).
 Source: `TitanPlayer/TitanPlayer/Core/Renderers/`; Metal shaders:
 `TitanPlayer/TitanPlayer/Resources/Shaders/`.
+
+## Logging convention
+
+Per-frame and per-packet `logger.info` calls are gated behind `#if DEBUG` to
+keep release builds silent. The rule:
+
+- **`logger.error` / `logger.warning`** — always on (debug + release).
+- **`logger.debug`** — wrapped in `#if DEBUG … #endif`. Used for hot-path
+  diagnostics (packet reading loop, decode cycle, file-open tracing).
+- **`logger.info`** — reserved for one-time, non-repetitive events that should
+  appear in release logs (if any remain).
+
+Affected files: `MediaPipeline.swift`, `PlaybackEngine.swift`,
+`PlaybackSession.swift`.
+
+The `Package.swift` also defines `TITAN_VERBOSE_LOGGING` in debug builds for
+custom conditional compilation needs.
