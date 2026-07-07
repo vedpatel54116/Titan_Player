@@ -13,11 +13,14 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
             }
         }
     }
-    @Published var currentTime: TimeInterval = 0
+    @Published var currentTime: TimeInterval = 0 {
+        didSet { _audioCurrentTimeBacking = currentTime }
+    }
     @Published var duration: TimeInterval = 0
     @Published var playbackRate: Float = 1.0
     @Published var audioDelay: TimeInterval = 0
-    var audioCurrentTime: TimeInterval { currentTime }
+    nonisolated(unsafe) private var _audioCurrentTimeBacking: TimeInterval = 0
+    nonisolated var audioCurrentTime: TimeInterval { _audioCurrentTimeBacking }
     @Published var lastError: PlaybackError?
     @Published var mediaPipelineError: Error?
     @Published var spatialAudioEnabled: Bool = true

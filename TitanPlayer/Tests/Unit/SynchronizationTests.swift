@@ -44,8 +44,10 @@ final class SynchronizationTests: XCTestCase {
 @MainActor
 class MockSynchronizationProvider: SynchronizationProvider {
     var audioTime: TimeInterval
+    nonisolated(unsafe) private var _audioCurrentTimeBacking: TimeInterval
     init(audioTime: TimeInterval) {
         self.audioTime = audioTime
+        self._audioCurrentTimeBacking = audioTime
     }
-    var audioCurrentTime: TimeInterval { audioTime }
+    nonisolated var audioCurrentTime: TimeInterval { _audioCurrentTimeBacking }
 }

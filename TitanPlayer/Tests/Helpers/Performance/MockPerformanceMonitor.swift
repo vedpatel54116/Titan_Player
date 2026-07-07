@@ -3,8 +3,8 @@ import Foundation
 
 @MainActor
 final class MockPerformanceMonitor: PerformanceMonitorProtocol {
-    private(set) var currentSystemState: SystemState = SystemState()
-    private(set) var recentMetrics: PerformanceMetrics =
+    nonisolated(unsafe) private(set) var currentSystemState: SystemState = SystemState()
+    nonisolated(unsafe) private(set) var recentMetrics: PerformanceMetrics =
         PerformanceMetrics(averageDecodeTime: 0, frameDropRate: 0, isDegraded: false)
 
     func inject(_ thermal: SystemState.ThermalState) {

@@ -4,6 +4,7 @@ import Combine
 
 /// Delegate-shaped interface that lets tests simulate download progress
 /// without instantiating real AVAssetDownloadURLSession tasks.
+@MainActor
 protocol StreamCacheLifecycleDelegate: AnyObject {
     func cache(_ cache: StreamingCache, didStart id: String, url: URL)
     func cache(_ cache: StreamingCache, didProgressUpdate id: String, progress: Double, bytes: Int64, totalBytes: Int64)
@@ -110,8 +111,9 @@ final class StreamingCache: ObservableObject, StreamingCacheProtocol {
 /// Conforms to `StreamCacheLifecycleDelegate` so it can be slotted into
 /// `StreamingCache` in place of the test mock. All AVAssetDownloadDelegate
 /// callbacks dispatch onto the main actor before touching the cache.
+@MainActor
 final class ProductionCacheDelegate: NSObject, StreamCacheLifecycleDelegate, AVAssetDownloadDelegate {
-    private weak var cache: StreamingCache?
+    nonisolated(unsafe) private weak var cache: StreamingCache?
     private var taskByID: [String: AVAggregateAssetDownloadTask] = [:]
 
     init(cache: StreamingCache) {
@@ -154,7 +156,7 @@ final class ProductionCacheDelegate: NSObject, StreamCacheLifecycleDelegate, AVA
 
     // AVAssetDownloadDelegate: URLSession runs these on its own queue, so
     // we hop to the main actor before mutating cache state.
-    func urlSession(_ session: URLSession,
+    nonisolated func urlSession(_ session: URLSession,
                     aggregateAssetDownloadTask task: AVAggregateAssetDownloadTask,
                     didLoad timeRange: CMTimeRange,
                     totalTimeRangesLoaded loadedTimeRanges: [NSValue],
@@ -177,7 +179,7 @@ final class ProductionCacheDelegate: NSObject, StreamCacheLifecycleDelegate, AVA
         }
     }
 
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
         guard let task = task as? AVAggregateAssetDownloadTask else { return }
         let id = String(task.taskIdentifier)
         Task { @MainActor [weak cache] in
