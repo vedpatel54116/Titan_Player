@@ -1,113 +1,181 @@
-# Titan Player
+<div align="right"><sub>
 
-**A native macOS video player built for people who care about picture quality.**
+<!-- signal bars: a quiet nod to scope monitors and HDR mastering racks -->
+<svg width="240" height="14" viewBox="0 0 240 14" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+  <rect x="0"   y="4" width="46" height="6" fill="#d8a44a"/>
+  <rect x="52"  y="4" width="32" height="6" fill="#3aa57a"/>
+  <rect x="90"  y="4" width="18" height="6" fill="#7a7a82"/>
+  <rect x="114" y="4" width="10" height="6" fill="#5a5a62"/>
+  <rect x="130" y="4" width="4"  height="6" fill="#2e2e34"/>
+  <rect x="140" y="2" width="2"  height="10" fill="#d8a44a"/>
+  <rect x="148" y="2" width="2"  height="10" fill="#d8a44a"/>
+  <rect x="156" y="2" width="2"  height="10" fill="#d8a44a"/>
+  <rect x="164" y="2" width="2"  height="10" fill="#3aa57a"/>
+  <rect x="172" y="2" width="2"  height="10" fill="#3aa57a"/>
+  <rect x="180" y="2" width="2"  height="10" fill="#7a7a82"/>
+  <rect x="188" y="2" width="2"  height="10" fill="#7a7a82"/>
+  <rect x="196" y="2" width="2"  height="10" fill="#5a5a62"/>
+  <rect x="204" y="2" width="2"  height="10" fill="#5a5a62"/>
+  <rect x="212" y="2" width="2"  height="10" fill="#2e2e34"/>
+  <text x="232" y="11" text-anchor="end" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="9" fill="#7a7a82">REC.2100</text>
+</svg>
 
-Titan Player renders HDR content the way it was meant to look — with real-time Metal GPU tone mapping, Dolby Vision RPU parsing, and spatial audio. It's a Swift/SwiftUI application that treats video playback as a rendering problem, not just a decoding one.
+</sub></div>
 
----
+<div align="center">
 
-## What makes it different
+# **Titan Player.**
 
-Most video players decode frames and hand them to a compositor. Titan Player takes the raw HDR signal and processes it through a full GPU pipeline — PQ/HLG to linear conversion, ACES or dynamic bezier tone mapping, and ICC-aware color transforms — before it ever reaches the screen. The result is accurate, display-aware HDR on any connected monitor, including EDR-capable Apple displays.
+### A native macOS video renderer. Built for people who care about how a frame looks.
 
-It also decodes video itself (via VideoToolbox or FFmpeg) rather than relying entirely on AVFoundation, which means it can inspect Dolby Vision RPU metadata, HDR10+ dynamic tone curves, and per-frame HDR parameters that AVFoundation discards.
+<sub><i>Pixels in. PQ → linear. Tone curve. Color matrix. Pixels out.</i></sub>
 
----
-
-## Features
-
-### HDR & Color
-
-- HDR10, HDR10+, Dolby Vision (Profiles 4, 5, 7, 8), and HLG playback
-- Real-time Metal compute tone mapping with per-frame transition smoothing
-- Dolby Vision RPU and HDR10+ SEI metadata parsing from CMSampleBuffer attachments
-- ICC profile color matrix transforms for sRGB, Display P3, and BT.2020
-- Extended Dynamic Range (EDR) output for Apple XDR displays
-
-### Audio
-
-- Spatial audio engine built on AVAudioEngine with HRTF processing
-- Room simulation with configurable size and reverb
-- AirPods head tracking and external tracker support
-- CoreAudio bridge for low-level device management
-- BS.1770-4 / EBU R128 loudness metering
-
-### Rendering
-
-- Metal compute shader YCbCr-to-RGB conversion
-- Full-screen quad rendering via MTKView at 60fps
-- Triple-buffered in-flight semaphore
-- Subtitle overlay rendered as a separate Metal pass (SRT, ASS, WebVTT via libass)
-- Fallback to AVPlayerLayer when Metal is unavailable
-
-### Decoding
-
-- Adaptive decoder manager: VideoToolbox (hardware) or FFmpeg (software)
-- Hardware codec profiles for Intel, M1, M2, M3, and M4 Macs
-- Runtime switching based on codec capabilities and system resources
-
-### Analysis Tools
-
-- GPU-accelerated histogram, vectorscope, and waveform display
-- Color picker with HSV/YCbCr conversion
-- Analysis panels only consume GPU when enabled
-
-### Network & Streaming
-
-- HLS playback with variant bitrate observation and adaptive quality switching
-- Streaming cache for offline playback via AVAssetDownloadURLSession
-- DASH support (in progress)
-- Network reachability and thermal state monitoring
-
-### Interface
-
-- Customizable keyboard shortcuts (30+ actions, conflict detection)
-- Mini player and full player modes
-- Library window for browsing media folders
-- Inspector view for media info
-- Touch Bar support
-- Multi-display detection with per-display HDR tone mapping
-- AirPlay integration
+</div>
 
 ---
 
-## Requirements
+> Most video players decode, then hand frames to a compositor.
+> **Titan Player treats video as a rendering problem.**
+>
+> It reads the raw HDR signal from the bitstream, parses per-frame Dolby Vision
+> RPU and HDR10+ SEI metadata that AVFoundation throws away, and pushes the
+> result through a custom Metal compute pipeline:
+> **PQ/HLG → linear → dynamic bezier or ACES tone map → ICC color matrix → display.**
+> Accurate HDR on any monitor, including EDR-capable Apple displays.
 
-- macOS 14.0 (Sonoma) or later
-- Xcode 15+ with Command Line Tools (for building)
-- [FFmpeg](https://ffmpeg.org/) libraries (built via the included script)
-- libass system library (for ASS/SSA subtitle rendering)
+<div align="right">
+
+<sub>
+
+`swift` `metal` `swiftui` `macos 14+` `appkit` `h.264/5` `av1` `vp9` `hdr10` `hdr10+` `dolby vision` `hlg` `edr`
+
+</sub>
+
+</div>
+
+---
+
+## What it does, briefly
+
+| | |
+|---|---|
+| **HDR** | HDR10, HDR10+ (dynamic bezier curves), Dolby Vision Profiles 4/5/7/8, HLG. Per-frame metadata parsing with bezier-based transition smoothing (~83 ms). |
+| **Tone map** | Metal compute shader: PQ/HLG → linear, ACES reference curve or dynamic per-frame bezier, GPU-side saturation/brightness. |
+| **Color** | ICC-aware matrix transforms for sRGB, Display P3, BT.2020, BT.709. Stable across connected and external displays. |
+| **Audio** | Spatial audio on AVAudioEngine with HRTF, configurable room simulation, AirPods head tracking, CoreAudio bridge, **BS.1770-4 / EBU R128** loudness metering. |
+| **Decoding** | Adaptive decoder: VideoToolbox (hardware) on Intel / M1 → M4, FFmpeg (software) when needed. Runtime switching via performance signals. |
+| **Analysis** | GPU-accelerated **histogram**, **vectorscope**, **waveform**, **color picker**. Idle when off — no GPU cost. |
+| **Streaming** | HLS with variant bitrate observation, AVAssetDownloadURLSession cache for offline. DASH in progress. |
+| **UI** | Customizable keyboard shortcuts (30+), mini player, library, inspector, Touch Bar, multi-display, AirPlay. |
+
+---
+
+## Architecture, at a glance
+
+Titan is a **modular monolith**: one macOS binary, strongly separated internal modules behind protocols.
+
+```
+                            ┌──────────────────────┐
+                            │   SwiftUI view layer │  PlayerView · Library · Inspector
+                            └──────────┬───────────┘
+                                       │ @EnvironmentObject
+                            ┌──────────▼───────────┐
+                            │   PlaybackSession    │  ObservableObject façade. Owns everything.
+                            └──┬────┬─────┬─────┬───┘
+                               │    │     │     │
+        ┌──────────────────────┘    │     │     └─────────────────────┐
+        │                           │     │                           │
+┌───────▼────────┐  ┌──────────▼──┐ │ ┌───▼─────────┐  ┌──────────────▼──────┐
+│ PlaybackEngine │  │MediaPipeline│ │ │ HDRMetadata │  │  StreamingManager   │
+│  (AVPlayer)    │  │ FFmpeg/AV → │ │ │  Processor  │  │     (HLS, cache)    │
+└───────┬────────┘  │ decoded     │ │ └──────┬──────┘  └─────────┬────────────┘
+        │           │ frames      │ │        │                 │
+        │           └──────┬──────┘ │ ┌──────▼─────────┐  ┌─────▼─────────┐
+        │                  ▼        │ │ MetalRenderer  │  │ VideoAnalysis │
+        │         ┌──────────────┐ │ │ MTKView · HDR   │  │ Histogram ·   │
+        │         │MetalRenderer │ │ │ compute · ICC  │  │ Vectorscope · │
+        │         │  (per-frame) │ │ └──────┬─────────┘  │ Waveform      │
+        │         └──────┬───────┘ │        │            └────────┬───────┘
+        │                ▼         │        ▼                     │
+┌───────▼──────────────────────────▼───────▼───────────────────────▼─────────┐
+│  AudioEngine (spatial, HRTF, room sim, BS.1770) · DisplayManager · AirPlay │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+<details>
+<summary><b>Key design choices</b></summary>
+
+- **`PlaybackSession`** — single `ObservableObject` owning every subsystem. The whole UI binds to it. State changes distribute through environment, nothing else.
+- **Dual-path rendering** — `PlaybackEngine` runs an `AVPlayer` for audio output while a custom `MediaPipeline` feeds decoded frames to the GPU renderer. You get AVFoundation's audio mixing and AirPlay *plus* per-frame HDR metadata inspection.
+- **`PlaybackState` state machine** — `canTransition(to:)` guards every change. Impossible states are unrepresentable.
+- **Protocol-oriented core** — `MediaDecoding`, `MediaDemuxing`, `VideoDecoding`, `FrameRendering` are all protocols. Hardware and software decoders are interchangeable; tests inject fakes the same way.
+- **Runtime shader compilation** — when SwiftPM doesn't ship a `default.metallib`, `MetalShaders.loadLibrary()` concatenates and compiles the `.metal` files at runtime. No `xcodebuild` step required.
+
+</details>
+
+---
+
+## Pipeline walkthrough — opening a Dolby Vision file
+
+```
+file:///Users/me/movies/dune.mkv
+        │
+        │   ContentView.handleDrop / AppDelegate.application(_:open:)
+        ▼
+PlaybackSession.openFile(_:)              ← security-scoped resource, AVURLAsset probe
+        │
+        ▼
+PlaybackEngine.load(_)                    ← AVPlayerItem, time observation, audio clock
+        │
+        ▼
+MediaPipeline.openFile(_)                 ← FFmpegDemuxer probe, backend selection
+        │                                   (AVFoundation if HW codec available,
+        │                                    FFmpeg otherwise)
+        ▼
+decode(packet) → processFrame(frame)       ← CMSampleBuffer carries HDR10+/DV attachments
+        │
+        ▼
+HDRMetadataProcessor.processMetadata(_)    ← parses RPU, SEI, derives per-frame params
+        │
+        ▼
+MetalRenderer.render(_)                   ← compute shader: PQ→linear→tone map→ICC matrix
+        │
+        ▼
+MTKView · draw(in:)                       ← screen @ 60 fps, triple-buffered
+```
+
+The HDR path runs **per frame**. Dynamic metadata (Dolby Vision RPU, HDR10+ SEI) flows through with a bezier transition smoother so scenes don't snap when curves change.
 
 ---
 
 ## Building
 
-### Quick build (SwiftPM)
+> Requires macOS 14 (Sonoma) or later. Xcode 15+ recommended for full development.
+
+### Quickest path — SwiftPM build
 
 ```bash
 cd TitanPlayer
 swift build
 ```
 
-### Full build with Xcode
+### Full Xcode build
 
 ```bash
 cd TitanPlayer
 make build
 ```
 
-### Build FFmpeg dependencies
+### FFmpeg dependencies (software decoder)
 
 ```bash
 cd TitanPlayer
-make ffmpeg
-# or run the script directly:
-./scripts/build-ffmpeg.sh
+make ffmpeg        # or: ./scripts/build-ffmpeg.sh
 ```
 
-### Run tests
+### Running the test suite
 
-Requires a full Xcode installation (not just Command Line Tools):
+Tests need a full Xcode install (Command Line Tools do not ship XCTest):
 
 ```bash
 sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
@@ -116,69 +184,52 @@ swift test
 
 ---
 
-## Project structure
+## Repo layout
 
 ```
 TitanPlayer/
-├── Core/                    # Business logic (non-UI)
-│   ├── Engine/              # Playback engine, MediaPipeline, audio
-│   ├── Renderers/           # Metal rendering pipeline
-│   ├── Decoders/            # AVFoundation + FFmpeg decoders
-│   ├── Streaming/           # HLS/DASH, caching, network
-│   ├── Performance/         # Adaptive quality & resource prediction
-│   ├── Analysis/            # GPU video analysis tools
-│   └── Hardware/            # Mac hardware detection
-├── UI/                      # SwiftUI views & controllers
-│   ├── Views/               # PlayerView, MiniPlayer, Sidebar, Library
-│   ├── Controls/            # ControlBar, SeekSlider
-│   ├── Session/             # Central PlaybackSession coordinator
-│   ├── Shortcuts/           # Keyboard shortcuts
-│   └── Analysis/            # Analysis panel views
-├── Subtitles/               # Parser, renderer, libass integration
-├── Telemetry/               # Opt-in Sentry crash reporting
-└── Resources/Shaders/       # Metal shaders (.metal)
+├── Core/                     # business logic (no UI)
+│   ├── Engine/               # PlaybackEngine, MediaPipeline, audio
+│   ├── Renderers/            # MetalRenderer, HDR pipeline, displays
+│   ├── Decoders/             # VideoToolbox + FFmpeg, codec negotiation
+│   ├── Streaming/            # HLS, cache, network monitor
+│   ├── Performance/          # PerformanceOptimizer, AdaptiveQualityController
+│   ├── Analysis/             # GPU scopes, audio metering
+│   └── Hardware/             # Mac hardware detection
+├── UI/                       # SwiftUI views & coordinators
+│   ├── Views/                # PlayerView, MiniPlayer, Library, Sidebar
+│   ├── Controls/             # ControlBar, SeekSlider
+│   ├── Session/              # PlaybackSession, DisplayManager, AirPlay
+│   └── Shortcuts/            # Bindings & conflict detection
+├── Subtitles/                # SRT / ASS (libass) / WebVTT
+├── Telemetry/                # Opt-in anonymous Sentry crash reporting
+└── Resources/Shaders/        # Metal Shading Language (.metal)
 ```
 
----
-
-## Architecture
-
-Titan Player uses a **modular monolith** pattern: a single macOS app with strongly separated internal modules communicating through protocols.
-
-**Central state coordinator:** `PlaybackSession` is an `ObservableObject` that owns all subsystems (engine, renderer, display manager, streaming, analysis, performance) and distributes state to SwiftUI views via `.environmentObject()`.
-
-**Dual-path rendering:** `PlaybackEngine` runs an `AVPlayer` for audio output alongside a custom `MediaPipeline` that feeds decoded frames to the Metal renderer. This lets Titan Player inspect HDR metadata at the decode stage while still using AVFoundation for audio mixing and AirPlay.
-
-**State machine:** `PlaybackState` enforces valid transitions with `canTransition(to:)`, preventing impossible state changes.
-
-**Protocol-oriented:** Core abstractions (`MediaDecoding`, `MediaDemuxing`, `VideoDecoding`, `FrameRendering`) are protocols, enabling hardware/software decoder swapping and testability.
-
-**Runtime shader compilation:** When a pre-compiled `default.metallib` isn't available (common with SwiftPM), `MetalShaders.loadLibrary()` concatenates all `.metal` files and compiles them at runtime.
+Specs and implementation plans: [`docs/superpowers/specs/`](docs/superpowers/specs/) · [`docs/superpowers/plans/`](docs/superpowers/plans/)
 
 ---
 
 ## Dependencies
 
-| Dependency | Purpose |
+| | |
 |---|---|
-| [FFmpegBuild](https://github.com/nicklama/FFmpegBuild) | Software video decoding (libavcodec, libavformat, libavutil, libswscale) |
-| [Sentry](https://github.com/getsentry/sentry-cocoa) | Opt-in crash reporting (anonymous, no PII) |
-| libass | ASS/SSA subtitle rendering (system library) |
+| **[FFmpegBuild](https://github.com/nicklama/FFmpegBuild)** | `libavcodec` · `libavformat` · `libavutil` · `libswscale` — software decoding when VideoToolbox can't. |
+| **[Sentry](https://github.com/getsentry/sentry-cocoa)** | *Opt-in* crash reporting. No PII. Off by default. |
+| **libass** | ASS/SSA subtitle rendering (system library via Homebrew). |
+
+Private. No data exfiltration beyond optional, anonymous crash reports.
 
 ---
 
-## Documentation
+## Privacy & telemetry
 
-Detailed design specs and implementation plans live in [`docs/superpowers/specs/`](docs/superpowers/specs/) and [`docs/superpowers/plans/`](docs/superpowers/plans/).
+Titan Player's telemetry is **opt-in, anonymous, and collects no personal information**. Nothing leaves your machine unless you turn it on.
+
+Full policy: [**PRIVACY.md**](PRIVACY.md).
 
 ---
 
 ## License
 
-MIT License. See [LICENSE](LICENSE) for details.
-
----
-
-## Privacy
-
-Titan Player's telemetry is completely opt-in, anonymous, and collects no personal information. See [PRIVACY.md](PRIVACY.md) for the full policy.
+[**MIT**](LICENSE) · © 2026 TitanPlayer contributors.
