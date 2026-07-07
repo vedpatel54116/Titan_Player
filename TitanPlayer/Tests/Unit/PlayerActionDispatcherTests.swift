@@ -193,4 +193,44 @@ final class PlayerActionDispatcherTests: XCTestCase {
             d.dispatch(action)
         }
     }
+
+    // MARK: - KeyEventRouter + Dispatcher integration
+
+    func testRouterAndDispatcherIntegration() {
+        let defaults = UserDefaults(suiteName: "integration-test-\(UUID())")!
+        let mgr = KeyboardShortcutManager(defaults: defaults)
+        let router = KeyEventRouter(shortcutManager: mgr)
+
+        let session = PlaybackSession(videoRenderer: MockFrameRenderer())
+        var fullscreenCalls = 0
+        var side = DispatcherSideEffects()
+        side.toggleFullscreen = { fullscreenCalls += 1 }
+        let dispatcher = PlayerActionDispatcher(session: session, sideEffects: side)
+
+        // Command+F (keyCode 3) → toggleFullscreen
+        let event = NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: 0, windowNumber: 0, context: nil,
+            characters: "f", charactersIgnoringModifiers: "f",
+            isARepeat: false, keyCode: 3
+        )!
+
+        let saved = PhysicalKeyResolver.layoutProvider
+        PhysicalKeyResolver.layoutProvider = FakeKeyboardLayoutProviderForIntegration()
+        defer { PhysicalKeyResolver.layoutProvider = saved }
+
+        if let action = router.action(for: event) {
+            dispatcher.dispatch(action)
+        }
+        XCTAssertEqual(fullscreenCalls, 1, "toggleFullscreen side-effect should have been called once")
+    }
+}
+
+private struct FakeKeyboardLayoutProviderForIntegration: KeyboardLayoutProviding {
+    func character(for keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> String? {
+        switch keyCode {
+        case 3: return "f"
+        default: return nil
+        }
+    }
 }
