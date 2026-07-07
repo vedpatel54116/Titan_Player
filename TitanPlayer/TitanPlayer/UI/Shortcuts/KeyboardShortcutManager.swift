@@ -4,6 +4,7 @@ import Foundation
 @MainActor
 final class KeyboardShortcutManager {
     static let defaultsKey = "titanplayer.keybindings"
+    static var isRecordingShortcut = false
 
     private var bindings: [PlayerAction: KeyBinding] = [:]
     private let defaults: UserDefaults
@@ -53,6 +54,11 @@ final class KeyboardShortcutManager {
         if let data = try? JSONEncoder().encode(Array(bindings.values)) {
             defaults.set(data, forKey: Self.defaultsKey)
         }
+    }
+
+    func resetToDefaults() {
+        bindings = Self.defaultBindings
+        persist()
     }
 
     static let defaultBindings: [PlayerAction: KeyBinding] = [
