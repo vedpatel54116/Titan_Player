@@ -3,7 +3,7 @@ import XCTest
 
 final class DecoderPreferenceTests: XCTestCase {
 
-    func test_force_preference_changes_selection_under_tied_conditions() {
+    func test_force_preference_changes_selection_under_tied_conditions() throws {
         let selector = DecoderSelector()
         var state = SystemStateFixture.nominal()
         state.thermalState = .nominal
@@ -19,19 +19,19 @@ final class DecoderPreferenceTests: XCTestCase {
         let hw = VideoToolboxDecoder()
         let sw = FFmpegSoftwareDecoder()
 
-        let neutralSelection = selector.selectDecoder(
+        let neutralSelection = try selector.selectDecoder(
             for: track,
             available: [hw, sw],
             systemState: state,
             preference: .neutral
         )
-        let hwSelection = selector.selectDecoder(
+        let hwSelection = try selector.selectDecoder(
             for: track,
             available: [hw, sw],
             systemState: state,
             preference: .preferHardware
         )
-        let swSelection = selector.selectDecoder(
+        let swSelection = try selector.selectDecoder(
             for: track,
             available: [hw, sw],
             systemState: state,

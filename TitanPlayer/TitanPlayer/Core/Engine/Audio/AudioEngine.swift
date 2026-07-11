@@ -118,7 +118,9 @@ final class AudioEngine: ObservableObject {
         engine.attach(environmentNode)
 
         // Configure optimal format for spatial audio
-        let format = AVAudioFormat(standardFormatWithSampleRate: targetSampleRate, channels: AVAudioChannelCount(currentChannelCount))!
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: targetSampleRate, channels: AVAudioChannelCount(currentChannelCount)) else {
+            throw AudioEngineError.invalidFormat
+        }
 
         // Connect nodes: player -> environment -> mixer -> output
         engine.connect(playerNode, to: environmentNode, format: format)
@@ -553,12 +555,16 @@ final class AudioEngine: ObservableObject {
         guard sourceSampleRate != targetSampleRate else { return buffer }
 
         // Use Core Audio's built-in resampler
-        let outputFormat = AVAudioFormat(commonFormat: buffer.format.commonFormat,
-                                          sampleRate: targetSampleRate,
-                                          channels: buffer.format.channelCount,
-                                          interleaved: buffer.format.isInterleaved)!
+        guard let outputFormat = AVAudioFormat(commonFormat: buffer.format.commonFormat,
+                                              sampleRate: targetSampleRate,
+                                              channels: buffer.format.channelCount,
+                                              interleaved: buffer.format.isInterleaved) else {
+            throw AudioEngineError.invalidFormat
+        }
 
-        let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * targetSampleRate / sourceSampleRate))!
+        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: outputFormat, frameCapacity: AVAudioFrameCount(Double(buffer.frameLength) * targetSampleRate / sourceSampleRate)) else {
+            throw AudioEngineError.bufferCreationFailed
+        }
 
         // Perform format conversion on the audio queue to avoid conflicts with graph mutations
         audioQueue.sync { [weak self] in

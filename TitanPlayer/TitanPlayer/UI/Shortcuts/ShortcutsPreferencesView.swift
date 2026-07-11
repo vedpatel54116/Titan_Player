@@ -62,7 +62,7 @@ struct ShortcutsPreferencesView: View {
     private func shortcutRow(for action: PlayerAction) -> some View {
         let binding = resolvedManager.binding(for: action)
         let display = binding.map {
-            ShortcutDisplayFormatter.displayString(key: $0.key, modifiers: $0.modifiers)
+            ShortcutDisplayFormatter.displayString(keyCode: $0.keyCode, modifiers: $0.modifiers.rawValue)
         } ?? "None"
         let isRecording = recordingAction == action
 
@@ -105,25 +105,13 @@ struct ShortcutsPreferencesView: View {
         KeyboardShortcutManager.isRecordingShortcut = true
 
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            if event.keyCode == 53 {
+            if event.keyCode == 53 {  // Escape
                 stopRecording()
                 return event
             }
 
-            let keyName = PhysicalKeyResolver.keyString(for: event)
             let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-
-            let baseKeys: Set<String> = [
-                "space", "return", "enter", "tab", "escape", "esc",
-                "delete", "del", "uparrow", "downarrow", "leftarrow", "rightarrow",
-                "home", "end", "pageup", "pagedown", "clear"
-            ]
-            let isSingleChar = keyName.count == 1
-            guard isSingleChar || baseKeys.contains(keyName) else {
-                return event
-            }
-
-            let candidate = KeyBinding(action: action, key: keyName, modifiers: mods)
+            let candidate = KeyBinding(action: action, keyCode: event.keyCode, modifiers: mods)
             do {
                 try resolvedManager.setBinding(candidate, for: action)
                 stopRecording()

@@ -2,6 +2,11 @@ import SwiftUI
 import UniformTypeIdentifiers
 import AppKit
 import Combine
+import CoreMedia
+
+extension Notification.Name {
+    static let toggleDebugOverlay = Notification.Name("toggleDebugOverlay")
+}
 
 struct PlayerView: View {
     @EnvironmentObject var session: PlaybackSession
@@ -54,6 +59,16 @@ struct PlayerView: View {
                 .padding(12)
                 .allowsHitTesting(false)
             }
+
+            VStack {
+                HStack {
+                    DebugOverlay()
+                    Spacer()
+                }
+                Spacer()
+            }
+            .padding(12)
+            .allowsHitTesting(false)
 
             VStack {
                 Spacer()
@@ -169,17 +184,31 @@ struct VideoContentView: View {
             case .ready, .playing, .paused, .seeking, .ended:
                 if session.isAudioOnly {
                     AudioOnlyView()
-                } else if session.isCompatibilityMode {
-                    AVPlayerViewWrapper(player: session.avPlayer)
-                } else if let renderer = session.renderer as? MetalRenderer {
-                    MetalMtkView(renderer: renderer)
                 } else {
-                    placeholder
+                    // Single ZStack so we can swap the rendering backend
+                    // (Metal MTKView <-> AVPlayerLayer) without tearing down the
+                    // AVPlayer instance. When compatibility mode toggles, we
+                    // preserve the playback position by seeking the player.
+                    ZStack {
+                        if session.isCompatibilityMode {
+                            AVPlayerViewWrapper(player: session.avPlayer)
+                        } else if let renderer = session.renderer as? MetalRenderer {
+                            MetalMtkView(renderer: renderer)
+                        } else {
+                            placeholder
+                        }
+                    }
                 }
             case .error:
                 Text(session.lastErrorMessage ?? "Playback error")
                     .foregroundColor(.red)
             }
+        }
+        .onChange(of: session.isCompatibilityMode) { _, _ in
+            // Preserve currentTime when switching between the Metal renderer
+            // and the AVPlayerLayer so the viewer doesn't lose their place.
+            let cmTime = CMTime(seconds: session.currentTime, preferredTimescale: 600)
+            session.avPlayer.seek(to: cmTime, toleranceBefore: .zero, toleranceAfter: .zero)
         }
         .fileImporter(
             isPresented: $showingFileImporter,

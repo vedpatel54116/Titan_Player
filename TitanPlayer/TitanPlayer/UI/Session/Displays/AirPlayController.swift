@@ -39,6 +39,7 @@ final class AirPlayController: ObservableObject {
     private let defaultDelay: TimeInterval
     private let subject = PassthroughSubject<Bool, Never>()
     private var cancellable: AnyCancellable?
+    private var kvoObserver: NSKeyValueObservation?
     private var userOverride: TimeInterval?
 
     init(
@@ -51,12 +52,20 @@ final class AirPlayController: ObservableObject {
             cancellable = mock.publisher
                 .removeDuplicates()
                 .sink { [weak self] _ in self?.refresh() }
+        } else if let player = monitor as? AVPlayer {
+            // The real AVPlayer exposes `externalPlaybackActive` via KVO. Observe
+            // it so AirPlay routing changes during playback update our state,
+            // mirroring the mock path (which previously was the only one wired).
+            kvoObserver = player.observe(\.isExternalPlaybackActive, options: [.new]) { [weak self] _, _ in
+                Task { @MainActor in self?.refresh() }
+            }
         }
         refresh()
     }
 
     deinit {
         cancellable?.cancel()
+        kvoObserver?.invalidate()
     }
 
     func refresh() {

@@ -6,6 +6,7 @@ class FFmpegDemuxer: MediaDemuxing {
     private var isOpen = false
     private let bridge = FFmpegBridge()
     private let demuxLock = OSAllocatedUnfairLock()
+    private let logger = Logger(subsystem: "com.titanplayer", category: "FFmpegDemuxer")
 
     func open(url: URL) async throws -> MediaInfo {
         FFmpegBridge.initialize()
@@ -102,7 +103,12 @@ class FFmpegDemuxer: MediaDemuxing {
     }
 
     func seek(to time: CMTime) async throws {
-        let timestamp = Int64(time.seconds * 600)
+        let seconds = time.seconds
+        guard seconds.isFinite else {
+            logger.warning("Seek aborted: non-finite timestamp (\(time.seconds))")
+            return
+        }
+        let timestamp = Int64(seconds * 600)
         demuxLock.withLock {
             _ = bridge.seekFrame(timestamp: timestamp, flags: 0)
         }

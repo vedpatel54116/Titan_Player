@@ -13,7 +13,7 @@ final class PixelBufferPool {
     
     private init() {}
     
-    func ensurePool(width: Int, height: Int, pixelFormat: OSType = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) -> CVPixelBufferPool {
+    func ensurePool(width: Int, height: Int, pixelFormat: OSType = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange) -> CVPixelBufferPool? {
         lock.lock()
         defer { lock.unlock() }
         
@@ -46,7 +46,8 @@ final class PixelBufferPool {
             if let fallback = createFallbackPool(width: width, height: height) {
                 return fallback
             }
-            fatalError("PixelBufferPool: unable to create any pixel buffer pool for \(width)x\(height)")
+            logger.error("PixelBufferPool: unable to create any pixel buffer pool for \(width)x\(height)")
+            return nil
         }
         
         pool = createdPool

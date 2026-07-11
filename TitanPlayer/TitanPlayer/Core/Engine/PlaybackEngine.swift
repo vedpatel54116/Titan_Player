@@ -27,6 +27,13 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
     @Published var mediaInfo: MediaInfo? = nil
     @Published var compatibilityMode: Bool = false
 
+    /// Publisher that emits `true` when playback has fallen back to the
+    /// AVPlayerLayer (compatibility) path, allowing the UI to switch between
+    /// the Metal view and the AVPlayer view.
+    var compatibilityModePublisher: AnyPublisher<Bool, Never> {
+        $compatibilityMode.eraseToAnyPublisher()
+    }
+
     private let player = AVPlayer()
 
     var avPlayer: AVPlayer { player }
@@ -201,22 +208,16 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
                 decoderLogger.debug("Duration loaded: \(self.duration, privacy: .public) seconds")
                 #endif
 
-                #if DEBUG
-                decoderLogger.debug("Setting AVPlayerItem on AVPlayer...")
-                #endif
-                self.currentLoadURL = url
-                self.itemStatusCancellable = observeItemStatus(item: item, url: url, source: .local)
-                self.player.replaceCurrentItem(with: item)
-                #if DEBUG
-                decoderLogger.debug("AVPlayerItem set successfully")
-                #endif
-
+                // Try custom pipeline first — only set AVPlayerItem after we know
+                // whether the MediaPipeline succeeded.
+                var pipelineSucceeded = false
                 #if DEBUG
                 decoderLogger.debug("Opening file in MediaPipeline...")
                 #endif
                 do {
                     try await mediaPipeline?.openFile(url: url, adaptiveManager: adaptiveDecoderManager)
                     self.mediaInfo = mediaPipeline?.mediaInfo
+                    pipelineSucceeded = true
                     #if DEBUG
                     decoderLogger.debug("MediaPipeline file opened successfully")
                     #endif
@@ -230,6 +231,18 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
                         source: .local
                     ))
                 }
+
+                // Now set up AVPlayerItem — in compatibility mode it drives
+                // playback; in Metal mode it provides duration/track info.
+                #if DEBUG
+                decoderLogger.debug("Setting AVPlayerItem on AVPlayer...")
+                #endif
+                self.currentLoadURL = url
+                self.itemStatusCancellable = observeItemStatus(item: item, url: url, source: .local)
+                self.player.replaceCurrentItem(with: item)
+                #if DEBUG
+                decoderLogger.debug("AVPlayerItem set successfully (pipelineSucceeded: \(pipelineSucceeded))")
+                #endif
 
                 if let decoderName = await adaptiveDecoderManager.selectedDecoderName {
                     #if DEBUG
@@ -283,6 +296,15 @@ class PlaybackEngine: ObservableObject, SynchronizationProvider {
                 switch status {
                 case .readyToPlay:
                     guard self.state != .ready else { return }
+                    // Don't transition to .ready from AVPlayer KVO unless
+                    // compatibility mode is active (AVPlayer handles playback)
+                    // or the custom pipeline already succeeded.
+                    guard self.compatibilityMode || self.mediaPipelineError == nil else {
+                        #if DEBUG
+                        self.decoderLogger.debug("Deferring .ready — MediaPipeline has not succeeded yet")
+                        #endif
+                        return
+                    }
                     self.duration = CMTimeGetSeconds(item.duration)
                     #if DEBUG
                     let label = source == .dash ? "DASH fallback " : ""

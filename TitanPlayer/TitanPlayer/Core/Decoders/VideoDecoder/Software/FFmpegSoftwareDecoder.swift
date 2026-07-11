@@ -51,6 +51,18 @@ final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
 
     private var decodedQueue: [CVPixelBuffer] = []
 
+    /// Pool producing IOSurface-backed, Metal-compatible bi-planar buffers.
+    /// Used as a transfer target when an FFmpeg output buffer is not itself
+    /// Metal-compatible (e.g. lacking an IOSurface backing).
+    private var outputPool: CVPixelBufferPool?
+
+    var negotiatedPixelFormat: OSType? {
+        lock.withLock {
+            trackIsHDR ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+                       : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        }
+    }
+
     private var decodeTimings: [TimeInterval] = []
     private let maxTimingSamples = 100
 
@@ -116,6 +128,8 @@ final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
                 state = .error(.softwareFailure)
                 throw DecoderError.softwareFailure
             }
+
+            outputPool = createPixelBufferPool(width: track.width, height: track.height)
 
             state = .configured
         }
@@ -207,6 +221,10 @@ final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
     func invalidate() async {
         lock.withLock {
             teardownCodecContext()
+            if let pool = outputPool {
+                CVPixelBufferPoolFlush(pool, .excessBuffers)
+            }
+            outputPool = nil
             decodedQueue.removeAll()
             currentCodec = nil
             trackWidth = 0
@@ -289,11 +307,17 @@ final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
 
         CVPixelBufferUnlockBaseAddress(pixelBuffer, [])
 
-        return pixelBuffer
+        // Guarantee a Metal/IOSurface-compatible buffer. The buffer produced
+        // by createPixelBuffer already requests Metal + IOSurface attributes,
+        // but if the system returned an incompatible buffer we transfer it
+        // through the pool to obtain a backed, bi-planar buffer.
+        if isMetalCompatible(pixelBuffer) {
+            return pixelBuffer
+        }
+        return transferThroughPool(pixelBuffer) ?? pixelBuffer
     }
 
-    private func ensureScaler(srcWidth: Int, srcHeight: Int, srcFormat: AVPixelFormat) {
-        if swsContext != nil { return }
+    private func ensureScaler(srcWidth: Int, srcHeight: Int, srcFormat: AVPixelFormat) {        if swsContext != nil { return }
         let dstFormat: AVPixelFormat = trackIsHDR ? _AV_PIX_FMT_P010LE : _AV_PIX_FMT_NV12
         swsContext = sws_getContext(
             Int32(srcWidth), Int32(srcHeight), srcFormat,
@@ -327,6 +351,85 @@ final class FFmpegSoftwareDecoder: VideoDecoding, @unchecked Sendable {
         )
 
         return status == noErr ? pixelBuffer : nil
+    }
+
+    private func createPixelBufferPool(width: Int, height: Int) -> CVPixelBufferPool? {
+        let pixelFormat: OSType = trackIsHDR
+            ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+
+        let attrs: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: pixelFormat,
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height,
+            kCVPixelBufferMetalCompatibilityKey as String: true,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+        ]
+
+        var pool: CVPixelBufferPool?
+        let status = CVPixelBufferPoolCreate(
+            kCFAllocatorDefault,
+            nil,
+            attrs as CFDictionary,
+            &pool
+        )
+        return status == noErr ? pool : nil
+    }
+
+    /// Returns `true` when the buffer is backed by an IOSurface (so it can be
+    /// used directly as a Metal texture source) and is bi-planar.
+    private func isMetalCompatible(_ buffer: CVPixelBuffer) -> Bool {
+        guard CVPixelBufferGetIOSurface(buffer) != nil else { return false }
+        return CVPixelBufferGetPlaneCount(buffer) >= 2
+    }
+
+    /// Copies a (possibly incompatible) source buffer into a fresh
+    /// IOSurface-backed, bi-planar buffer obtained from the output pool.
+    private func transferThroughPool(_ source: CVPixelBuffer) -> CVPixelBuffer? {
+        let width = CVPixelBufferGetWidth(source)
+        let height = CVPixelBufferGetHeight(source)
+        let poolPixelFormat: OSType = trackIsHDR
+            ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+
+        var target: CVPixelBuffer?
+        if let pool = outputPool {
+            CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &target)
+        }
+        if target == nil {
+            let attrs: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: poolPixelFormat,
+                kCVPixelBufferMetalCompatibilityKey as String: true,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+            ]
+            CVPixelBufferCreate(
+                kCFAllocatorDefault, width, height, poolPixelFormat,
+                attrs as CFDictionary, &target
+            )
+        }
+        guard let target else { return nil }
+
+        CVPixelBufferLockBaseAddress(source, .readOnly)
+        CVPixelBufferLockBaseAddress(target, [])
+        defer {
+            CVPixelBufferUnlockBaseAddress(source, .readOnly)
+            CVPixelBufferUnlockBaseAddress(target, [])
+        }
+
+        let planeCount = min(CVPixelBufferGetPlaneCount(source),
+                             CVPixelBufferGetPlaneCount(target))
+        for plane in 0..<planeCount {
+            guard let src = CVPixelBufferGetBaseAddressOfPlane(source, plane),
+                  let dst = CVPixelBufferGetBaseAddressOfPlane(target, plane) else { continue }
+            let srcStride = CVPixelBufferGetBytesPerRowOfPlane(source, plane)
+            let dstStride = CVPixelBufferGetBytesPerRowOfPlane(target, plane)
+            let planeHeight = CVPixelBufferGetHeightOfPlane(source, plane)
+            for row in 0..<planeHeight {
+                memcpy(dst + row * dstStride, src + row * srcStride,
+                       min(srcStride, dstStride))
+            }
+        }
+        return target
     }
 
     private func recordTimingUnlocked(_ timing: TimeInterval) {

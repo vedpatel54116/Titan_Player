@@ -117,7 +117,16 @@ final class DisplayManager: ObservableObject {
         let newIDs = Set(configs.map(\.stableID))
         let removed = lastSeenIDs.subtracting(newIDs)
         for id in removed { events.send(.disconnected(stableID: id)) }
-        for config in configs { events.send(.connected(config)) }
+        // Only emit `.connected` for displays we have not seen before.
+        // Previously every refresh re-emitted `.connected` for all displays,
+        // which tore down and recreated external windows on every minor
+        // screen-parameter change (resolution, brightness, etc.).
+        let connected = newIDs.subtracting(lastSeenIDs)
+        for id in connected {
+            if let config = configs.first(where: { $0.stableID == id }) {
+                events.send(.connected(config))
+            }
+        }
 
         self.displays = configs
         self.lastSeenIDs = newIDs

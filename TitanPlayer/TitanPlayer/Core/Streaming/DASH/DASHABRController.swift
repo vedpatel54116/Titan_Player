@@ -17,10 +17,13 @@ final class DASHABRController: ObservableObject {
 
     private(set) var estimatedThroughput: Double = 0
 
-    init(qualities: [DASHQuality], initial: DASHQuality?) {
+    init(qualities: [DASHQuality], initial: DASHQuality?) throws {
         let sorted = DASHQuality.sortedByBandwidth(qualities)
+        guard let initialQuality = initial ?? sorted.first else {
+            throw StreamingError.dashNotSupported(URL(string: "dash://empty-manifest")!)
+        }
         self._availableQualities = Published(initialValue: sorted)
-        self._currentQuality = Published(initialValue: initial ?? sorted.first!)
+        self._currentQuality = Published(initialValue: initialQuality)
     }
 
     func recordThroughput(bytesDownloaded: Int, durationSeconds: Double) {

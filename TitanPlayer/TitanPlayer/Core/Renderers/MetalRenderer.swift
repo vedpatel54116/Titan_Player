@@ -15,6 +15,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     
     private var textureCache: CVMetalTextureCache?
     private var pixelBufferPool: CVPixelBufferPool?
+    private var nv12PixelBufferPool: CVPixelBufferPool?
     
     private var currentHDRMode: HDRMode = .sdr
     private var displayCapabilities: DisplayCapabilities?
@@ -33,9 +34,13 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     private var dynamicBrightnessAdjustment: Float = 0.0
     private var useDynamicMetadata: Bool = false
     
-    // HDR mode tracking for telemetry
     private var hdrModeStartTime: Date?
     private var lastReportedHDRMode: TelemetryHDRMode?
+
+    // Debug state — exposed for the debug overlay
+    var lastPixelFormat: OSType = 0
+    var debugPipelineState: String = "idle"
+    var pendingFrameCount: Int { pendingFrame != nil ? 1 : 0 }
     
     private var hdrUniformsBuffer: MTLBuffer?
     private var uniformsBuffer: MTLBuffer?
@@ -71,6 +76,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     
     weak var delegate: MetalRendererDelegate?
     weak var frameStore: FrameStore?
+    private weak var mtkView: MTKView?
     
     private override init() {
         guard let device = MTLCreateSystemDefaultDevice() else {
@@ -102,6 +108,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     }
 
     func attach(to view: MTKView) {
+        self.mtkView = view
         view.delegate = self
         view.colorPixelFormat = .rgba16Float
         view.framebufferOnly = false
@@ -209,6 +216,28 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
             length: MemoryLayout<Uniforms>.size,
             options: .storageModeShared
         )
+
+        // The fragment shader reads this buffer every frame. It must always
+        // hold valid values — Metal zero-initializes new buffers, which would
+        // leave `iccMatrix` as the zero matrix and blank the output to black.
+        updatePictureUniforms()
+    }
+
+    /// Populates `uniformsBuffer` with neutral picture controls and an identity
+    /// ICC matrix. The HDR tone-mapping pass already performs the gamut/color
+    /// conversion, so the fragment pass is a pass-through here. Call this again
+    /// if the user adjusts brightness/contrast/saturation/hue at runtime.
+    private func updatePictureUniforms() {
+        guard let buffer = uniformsBuffer else { return }
+
+        var uniforms = Uniforms(
+            brightness: 0.0,
+            contrast: 1.0,
+            saturation: 1.0,
+            hue: 0.0,
+            iccMatrix: matrix_identity_float3x3
+        )
+        memcpy(buffer.contents(), &uniforms, MemoryLayout<Uniforms>.size)
     }
     
         
@@ -474,6 +503,11 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     func render(pixelBuffer: CVPixelBuffer, 
                 metadata: HDRMetadata?,
                 to drawable: CAMetalDrawable) {
+        let pixelFormat = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        lastPixelFormat = pixelFormat
+        debugPipelineState = "decoding"
+        logger.debug("render(pixelBuffer:to:) format: \(self.fourCharCodeToString(pixelFormat), privacy: .public)")
+
         inFlightSemaphore.wait()
         
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
@@ -488,7 +522,6 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         guard let textures = createTextures(from: pixelBuffer),
               let ycbcrPipeline = ycbcrPipeline else {
             logger.warning("Failed to create textures from pixel buffer, clearing to black")
-            // No valid textures — clear to black
             let desc = createRenderPassDescriptor(drawable: drawable)
             if let enc = commandBuffer.makeRenderCommandEncoder(descriptor: desc) {
                 enc.endEncoding()
@@ -506,6 +539,12 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         )
         
         guard let rgbTexture = rgbTexture else {
+            logger.warning("Failed to create RGB texture, presenting black")
+            let desc = createRenderPassDescriptor(drawable: drawable)
+            if let enc = commandBuffer.makeRenderCommandEncoder(descriptor: desc) {
+                enc.endEncoding()
+            }
+            commandBuffer.present(drawable)
             commandBuffer.commit()
             return
         }
@@ -536,11 +575,17 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         updateToneMappedTexture(width: rgbTexture.width, height: rgbTexture.height)
         
         guard let outputTexture = toneMappedTexture else {
+            logger.warning("Tone mapped texture nil, presenting black")
+            let desc = createRenderPassDescriptor(drawable: drawable)
+            if let enc = commandBuffer.makeRenderCommandEncoder(descriptor: desc) {
+                enc.endEncoding()
+            }
+            commandBuffer.present(drawable)
             commandBuffer.commit()
             return
         }
         
-        updateHDRUniforms(metadata: metadata)
+        updateHDRUniforms()
         
         if let computeEncoder = commandBuffer.makeComputeCommandEncoder(),
            let toneMappingPipeline = toneMappingPipeline {
@@ -585,18 +630,22 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     
     private func createTextures(from pixelBuffer: CVPixelBuffer) -> (y: MTLTexture, cbcr: MTLTexture)? {
         guard let cache = textureCache else { return nil }
-        
+
+        guard let compatibleBuffer = ensureCompatiblePixelBuffer(pixelBuffer) else {
+            return nil
+        }
+
         var yTextureRef: CVMetalTexture?
         var cbcrTextureRef: CVMetalTexture?
         
         let yStatus = CVMetalTextureCacheCreateTextureFromImage(
             kCFAllocatorDefault,
             cache,
-            pixelBuffer,
+            compatibleBuffer,
             nil,
             .r8Unorm,
-            CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
-            CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
+            CVPixelBufferGetWidthOfPlane(compatibleBuffer, 0),
+            CVPixelBufferGetHeightOfPlane(compatibleBuffer, 0),
             0,
             &yTextureRef
         )
@@ -604,11 +653,11 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         let cbcrStatus = CVMetalTextureCacheCreateTextureFromImage(
             kCFAllocatorDefault,
             cache,
-            pixelBuffer,
+            compatibleBuffer,
             nil,
             .rg8Unorm,
-            CVPixelBufferGetWidthOfPlane(pixelBuffer, 1),
-            CVPixelBufferGetHeightOfPlane(pixelBuffer, 1),
+            CVPixelBufferGetWidthOfPlane(compatibleBuffer, 1),
+            CVPixelBufferGetHeightOfPlane(compatibleBuffer, 1),
             1,
             &cbcrTextureRef
         )
@@ -624,10 +673,80 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         
         return (y: yTex, cbcr: cbcrTex)
     }
+
+    private func ensureCompatiblePixelBuffer(_ pixelBuffer: CVPixelBuffer) -> CVPixelBuffer? {
+        let format = CVPixelBufferGetPixelFormatType(pixelBuffer)
+        let targetFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+
+        if format == targetFormat {
+            return pixelBuffer
+        }
+
+        logger.warning("Pixel buffer format \(self.fourCharCodeToString(format)) is not NV12, converting")
+
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+
+        if nv12PixelBufferPool == nil {
+            let attrs: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: targetFormat,
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any]
+            ]
+            var pool: CVPixelBufferPool?
+            CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, attrs as CFDictionary, &pool)
+            nv12PixelBufferPool = pool
+        }
+
+        guard let pool = nv12PixelBufferPool else {
+            logger.error("Failed to create NV12 pixel buffer pool")
+            return nil
+        }
+
+        var convertedBuffer: CVPixelBuffer?
+        CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &convertedBuffer)
+
+        guard let output = convertedBuffer else {
+            logger.error("Failed to allocate NV12 pixel buffer from pool")
+            return nil
+        }
+
+        // Convert using vImage / Accelerate
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        CVPixelBufferLockBaseAddress(output, [])
+
+        if CVPixelBufferIsPlanar(pixelBuffer) {
+            // Source is planar — copy planes directly if possible, else use CIImage
+            let ciInput = CIImage(cvPixelBuffer: pixelBuffer)
+            let ciContext = CIContext()
+            ciContext.render(ciInput, to: output)
+        } else {
+            // Source is packed (e.g. BGRA) — use CIImage conversion
+            let ciInput = CIImage(cvPixelBuffer: pixelBuffer)
+            let ciContext = CIContext()
+            ciContext.render(ciInput, to: output)
+        }
+
+        CVPixelBufferUnlockBaseAddress(output, [])
+        CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly)
+
+        return output
+    }
+
+    private func fourCharCodeToString(_ code: OSType) -> String {
+        let bytes = [
+            UInt8((code >> 24) & 0xFF),
+            UInt8((code >> 16) & 0xFF),
+            UInt8((code >> 8) & 0xFF),
+            UInt8(code & 0xFF)
+        ]
+        return String(bytes: bytes, encoding: .ascii) ?? String(format: "0x%08X", code)
+    }
     
     private func createRGBTexture(width: Int, height: Int) -> MTLTexture? {
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba8Unorm,
+            pixelFormat: .rgba16Float,
             width: width,
             height: height,
             mipmapped: false
@@ -654,7 +773,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
         toneMappedTexture = device.makeTexture(descriptor: descriptor)
     }
     
-    private func updateHDRUniforms(metadata: HDRMetadata?) {
+    private func updateHDRUniforms() {
         guard let buffer = hdrUniformsBuffer else { return }
         
         var uniforms = HDRUniforms(
@@ -672,19 +791,21 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
             useDynamicMetadata: useDynamicMetadata ? 1 : 0
         )
         
-        if metadata != nil {
-            switch currentHDRMode {
-            case .hdr10(let hdr10Meta):
-                uniforms.hdrMode = 1
-                uniforms.maxLuminance = hdr10Meta.maxDisplayLuminance
-                uniforms.minLuminance = hdr10Meta.minDisplayLuminance
-                uniforms.maxContentLightLevel = hdr10Meta.maxContentLightLevel
-                uniforms.maxFrameAverageLightLevel = hdr10Meta.maxFrameAverageLightLevel
-            case .hlg:
-                uniforms.hdrMode = 2
-            case .sdr:
-                uniforms.hdrMode = 0
-            }
+        // Drive HDR tone-mapping mode from the decoder/metadata state rather
+        // than from a transient `metadata` argument. `currentHDRMode` is kept
+        // up to date by `applyMetadataUpdate`, so it is the correct source of
+        // truth on both the live MTKView path and the legacy render path.
+        switch currentHDRMode {
+        case .hdr10(let hdr10Meta):
+            uniforms.hdrMode = 1
+            uniforms.maxLuminance = hdr10Meta.maxDisplayLuminance
+            uniforms.minLuminance = hdr10Meta.minDisplayLuminance
+            uniforms.maxContentLightLevel = hdr10Meta.maxContentLightLevel
+            uniforms.maxFrameAverageLightLevel = hdr10Meta.maxFrameAverageLightLevel
+        case .hlg:
+            uniforms.hdrMode = 2
+        case .sdr:
+            uniforms.hdrMode = 0
         }
         
         memcpy(buffer.contents(), &uniforms, MemoryLayout<HDRUniforms>.size)
@@ -757,11 +878,8 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
             currentDrawableSize = view.drawableSize
         }
 
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else { return }
         inFlightSemaphore.wait()
-        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
-            inFlightSemaphore.signal()
-            return
-        }
         commandBuffer.addCompletedHandler { [weak self] _ in
             self?.inFlightSemaphore.signal()
         }
@@ -809,7 +927,7 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
                        let update = hdrMetadataProcessor.processMetadata(from: sampleBuffer) {
                         applyMetadataUpdate(update)
                     }
-                    updateHDRUniforms(metadata: nil)
+                    updateHDRUniforms()
                     
                     if let outputTexture = toneMappedTexture,
                        let toneMappingPipeline = toneMappingPipeline,
@@ -871,10 +989,9 @@ class MetalRenderer: NSObject, MTKViewDelegate, FrameRendering {
     // MARK: - FrameRendering
 
     func render(_ frame: VideoFrame) async throws {
-        // Store the most recent frame; drawable-driven submission happens
-        // in draw(in:) once the next CAMetalDrawable is available.
         logger.debug("Received video frame for rendering")
         pendingFrame = frame
+        mtkView?.setNeedsDisplay(mtkView?.bounds ?? .zero)
     }
 
     private var pendingFrame: VideoFrame?

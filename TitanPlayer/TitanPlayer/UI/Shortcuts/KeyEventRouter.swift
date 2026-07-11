@@ -17,11 +17,11 @@ struct KeyEventRouter {
     func action(for event: NSEvent) -> PlayerAction? {
         if isFirstResponderTextEditing(event: event) { return nil }
 
-        let keyName = PhysicalKeyResolver.keyString(for: event)
+        let code = event.keyCode
         let mods = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         for action in PlayerAction.allCases {
             guard let binding = shortcutManager.binding(for: action) else { continue }
-            if binding.key == keyName && binding.modifiers == mods {
+            if binding.keyCode == code && binding.modifiers == mods {
                 return action
             }
         }

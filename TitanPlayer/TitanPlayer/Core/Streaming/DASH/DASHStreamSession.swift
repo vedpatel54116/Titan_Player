@@ -50,26 +50,29 @@ final class DASHStreamSession: @unchecked Sendable {
         Task { @MainActor in
             abrController.recordThroughput(bytesDownloaded: bytesDownloaded, durationSeconds: durationSeconds)
             let newQuality = abrController.currentQuality
-            if newQuality.id != currentQuality.id {
+            let currentId = lock.withLock { self.currentQuality.id }
+            if newQuality.id != currentId {
                 try? await switchQuality(to: newQuality)
             }
         }
     }
 
     func switchQuality(to quality: DASHQuality) async throws {
-        let oldDemuxer = lock.withLock { self.demuxer }
-
-        oldDemuxer?.close()
-
         let url = try resolveSegmentURL(for: quality)
         let newDemuxer = FFmpegDemuxer()
         let info = try await newDemuxer.open(url: url)
 
-        lock.withLock {
+        let oldDemuxer = lock.withLock { () -> FFmpegDemuxer? in
+            let previous = self.demuxer
             self.demuxer = newDemuxer
             self._mediaInfo = info
             self.currentQuality = quality
+            return previous
         }
+
+        // Close the previous demuxer only after the new one is in place so
+        // concurrent readers always observe a valid (non-nil) demuxer.
+        oldDemuxer?.close()
     }
 
     func seek(to time: CMTime) async throws {
@@ -96,7 +99,10 @@ final class DASHStreamSession: @unchecked Sendable {
     private func resolveSegmentURL(for quality: DASHQuality) throws -> URL {
         if let baseUrl = quality.baseUrl {
             if baseUrl.hasPrefix("http://") || baseUrl.hasPrefix("https://") {
-                return URL(string: baseUrl)!
+                guard let resolved = URL(string: baseUrl) else {
+                    throw StreamingError.invalidURL
+                }
+                return resolved
             }
             return manifestURL.deletingLastPathComponent().appendingPathComponent(baseUrl)
         }

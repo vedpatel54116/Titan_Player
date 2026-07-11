@@ -215,22 +215,9 @@ final class PlayerActionDispatcherTests: XCTestCase {
             isARepeat: false, keyCode: 3
         )!
 
-        let saved = PhysicalKeyResolver.layoutProvider
-        PhysicalKeyResolver.layoutProvider = FakeKeyboardLayoutProviderForIntegration()
-        defer { PhysicalKeyResolver.layoutProvider = saved }
-
         if let action = router.action(for: event) {
             dispatcher.dispatch(action)
         }
         XCTAssertEqual(fullscreenCalls, 1, "toggleFullscreen side-effect should have been called once")
-    }
-}
-
-private struct FakeKeyboardLayoutProviderForIntegration: KeyboardLayoutProviding {
-    func character(for keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> String? {
-        switch keyCode {
-        case 3: return "f"
-        default: return nil
-        }
     }
 }

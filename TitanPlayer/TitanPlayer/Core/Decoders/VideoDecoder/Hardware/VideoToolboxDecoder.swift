@@ -12,10 +12,19 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
     private(set) var state: DecoderState = .idle
 
     private let lock = OSAllocatedUnfairLock()
+    private let decoderLogger = Logger(subsystem: "com.titanplayer", category: "VideoToolboxDecoder")
 
     private var session: VTDecompressionSession?
     private var formatDescription: CMVideoFormatDescription?
     private var pixelBufferPool: CVPixelBufferPool?
+
+    // Documented value of `kVTVideoDecoderBadDataErr` (-12909). Defined
+    // locally so we don't depend on the exact SDK symbol availability.
+    private let videoDecoderBadDataErr: OSStatus = -12909
+
+    // The pixel format actually negotiated for the decompression session.
+    private var _negotiatedPixelFormat: OSType?
+    var negotiatedPixelFormat: OSType? { lock.withLock { _negotiatedPixelFormat } }
 
     private(set) var isUsingHardwareAcceleration: Bool = false
 
@@ -55,12 +64,13 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
             }
             formatDescription = formatDesc
 
-            let session = try createDecompressionSession(for: track, isHDR: track.isHDR)
+            let (session, negotiatedFormat) = try createDecompressionSession(for: track, isHDR: track.isHDR)
             self.session = session
+            self._negotiatedPixelFormat = negotiatedFormat
 
             isUsingHardwareAcceleration = queryHardwareUsage(session: session)
 
-            pixelBufferPool = createPixelBufferPool(for: track, isHDR: track.isHDR)
+            pixelBufferPool = createPixelBufferPool(for: track, pixelFormat: negotiatedFormat)
 
             state = .configured
         }
@@ -152,9 +162,17 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
     }
 
     func invalidate() async {
-        lock.withLock {
+        let pending = lock.withLock {
+            let cont = pendingContinuation
+            pendingContinuation = nil
             invalidateSessionUnlocked()
             state = .idle
+            return cont
+        }
+        // Resume any in-flight decode continuation so the awaiting task does
+        // not hang forever after the session is torn down.
+        if let pending {
+            pending.resume(throwing: CancellationError())
         }
     }
 
@@ -171,7 +189,7 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
     // MARK: - Private Helpers
 
     private func createDecompressionSession(for track: VideoTrackInfo,
-                                            isHDR: Bool) throws -> VTDecompressionSession {
+                                            isHDR: Bool) throws -> (VTDecompressionSession, OSType) {
         guard let formatDescription = formatDescription else {
             throw DecoderError.sessionNotConfigured
         }
@@ -180,42 +198,62 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
             kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder as String: true
         ]
 
-        let pixelFormat: OSType = isHDR
+        // Prefer VideoRange; if the decoder rejects the data (e.g. full-range
+        // encoded source flagged as video-range), retry with FullRange.
+        let preferredFormat: OSType = isHDR
             ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
             : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
 
-        let destinationAttributes: [String: Any] = [
-            kCVPixelBufferPixelFormatTypeKey as String: pixelFormat,
-            kCVPixelBufferMetalCompatibilityKey as String: true,
-            kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
-        ]
+        let fallbackFormat: OSType = isHDR
+            ? kCVPixelFormatType_420YpCbCr10BiPlanarFullRange
+            : kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
 
-        var session: VTDecompressionSession?
-        var outputCallback = VTDecompressionOutputCallbackRecord(
-            decompressionOutputCallback: videoToolboxDecompressionCallback,
-            decompressionOutputRefCon: Unmanaged.passUnretained(self).toOpaque()
-        )
+        let candidateFormats = [preferredFormat, fallbackFormat]
 
-        let status = VTDecompressionSessionCreate(
-            allocator: kCFAllocatorDefault,
-            formatDescription: formatDescription,
-            decoderSpecification: decoderSpecification as CFDictionary,
-            imageBufferAttributes: destinationAttributes as CFDictionary,
-            outputCallback: &outputCallback,
-            decompressionSessionOut: &session
-        )
+        for candidate in candidateFormats {
+            let destinationAttributes: [String: Any] = [
+                kCVPixelBufferPixelFormatTypeKey as String: candidate,
+                kCVPixelBufferMetalCompatibilityKey as String: true,
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any],
+            ]
 
-        guard status == noErr, let session = session else {
+            var session: VTDecompressionSession?
+            var outputCallback = VTDecompressionOutputCallbackRecord(
+                decompressionOutputCallback: videoToolboxDecompressionCallback,
+                decompressionOutputRefCon: Unmanaged.passUnretained(self).toOpaque()
+            )
+
+            let status = VTDecompressionSessionCreate(
+                allocator: kCFAllocatorDefault,
+                formatDescription: formatDescription,
+                decoderSpecification: decoderSpecification as CFDictionary,
+                imageBufferAttributes: destinationAttributes as CFDictionary,
+                outputCallback: &outputCallback,
+                decompressionSessionOut: &session
+            )
+
+            if status == noErr, let session = session {
+                VTSessionSetProperty(
+                    session,
+                    key: kVTDecompressionPropertyKey_RealTime,
+                    value: kCFBooleanTrue as CFPropertyList
+                )
+                return (session, candidate)
+            }
+
+            // The decoder explicitly rejected the data format — try the next
+            // candidate (FullRange) before giving up.
+            if status == videoDecoderBadDataErr {
+                #if DEBUG
+                decoderLogger.debug("VTDecompressionSessionCreate rejected format \(candidate, privacy: .public) with bad-data err, retrying next candidate")
+                #endif
+                continue
+            }
+
             throw DecoderError.hardwareFailure
         }
 
-        VTSessionSetProperty(
-            session,
-            key: kVTDecompressionPropertyKey_RealTime,
-            value: kCFBooleanTrue as CFPropertyList
-        )
-
-        return session
+        throw DecoderError.hardwareFailure
     }
 
     private func queryHardwareUsage(session: VTDecompressionSession) -> Bool {
@@ -232,11 +270,7 @@ final class VideoToolboxDecoder: VideoDecoding, @unchecked Sendable {
         return false
     }
 
-    private func createPixelBufferPool(for track: VideoTrackInfo, isHDR: Bool) -> CVPixelBufferPool? {
-        let pixelFormat: OSType = isHDR
-            ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
-            : kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
-
+    private func createPixelBufferPool(for track: VideoTrackInfo, pixelFormat: OSType) -> CVPixelBufferPool? {
         let attributes: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: pixelFormat,
             kCVPixelBufferWidthKey as String: track.width,

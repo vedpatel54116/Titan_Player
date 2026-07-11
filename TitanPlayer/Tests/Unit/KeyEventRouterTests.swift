@@ -7,13 +7,6 @@ final class KeyEventRouterTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private static let qwertyKeyCodes: [UInt16: String] = [
-        0: "a", 1: "s", 2: "d", 3: "f", 4: "h", 5: "g", 6: "z",
-        7: "x", 8: "c", 9: "v", 11: "b", 12: "q", 13: "w", 14: "e",
-        15: "r", 16: "y", 17: "t", 31: "o", 32: "u", 34: "i", 35: "p",
-        37: "l", 38: "j", 40: "k", 45: "n", 46: "m"
-    ]
-
     private func makeManager() -> KeyboardShortcutManager {
         let defaults = UserDefaults(suiteName: "router-test-\(UUID())")!
         return KeyboardShortcutManager(defaults: defaults)
@@ -39,18 +32,6 @@ final class KeyEventRouterTests: XCTestCase {
         )!
     }
 
-    private func withLayout<T>(_ provider: KeyboardLayoutProviding,
-                               _ body: () throws -> T) rethrows -> T {
-        let saved = PhysicalKeyResolver.layoutProvider
-        PhysicalKeyResolver.layoutProvider = provider
-        defer { PhysicalKeyResolver.layoutProvider = saved }
-        return try body()
-    }
-
-    private func qwertyProvider() -> FakeKeyboardLayoutProvider {
-        FakeKeyboardLayoutProvider(mapping: Self.qwertyKeyCodes)
-    }
-
     // MARK: - Exact match
 
     func testSpaceBarMatchesTogglePlayPause() {
@@ -58,9 +39,7 @@ final class KeyEventRouterTests: XCTestCase {
         let router = KeyEventRouter(shortcutManager: mgr)
         let event = makeEvent(keyCode: 49, characters: " ", charactersIgnoringModifiers: " ")
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertEqual(result, .togglePlayPause)
     }
 
@@ -69,9 +48,7 @@ final class KeyEventRouterTests: XCTestCase {
         let router = KeyEventRouter(shortcutManager: mgr)
         let event = makeEvent(keyCode: 46)
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertEqual(result, .toggleMute)
     }
 
@@ -80,9 +57,7 @@ final class KeyEventRouterTests: XCTestCase {
         let router = KeyEventRouter(shortcutManager: mgr)
         let event = makeEvent(keyCode: 3, modifiers: .command)
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertEqual(result, .toggleFullscreen)
     }
 
@@ -94,9 +69,7 @@ final class KeyEventRouterTests: XCTestCase {
         let event = makeEvent(keyCode: 49, modifiers: .command,
                               characters: " ", charactersIgnoringModifiers: " ")
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertNil(result)
     }
 
@@ -105,9 +78,7 @@ final class KeyEventRouterTests: XCTestCase {
         let router = KeyEventRouter(shortcutManager: mgr)
         let event = makeEvent(keyCode: 3)
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertNil(result)
     }
 
@@ -120,13 +91,11 @@ final class KeyEventRouterTests: XCTestCase {
 
         let event = makeEvent(keyCode: 49, characters: " ", charactersIgnoringModifiers: " ")
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertNil(result)
     }
 
-    // MARK: - Arrow-key special-casing
+    // MARK: - Arrow-key matching
 
     func testLeftArrowMatchesSeekBackward10() {
         let mgr = makeManager()
@@ -134,9 +103,7 @@ final class KeyEventRouterTests: XCTestCase {
         let event = makeEvent(keyCode: 123, modifiers: [],
                               characters: "\u{F702}", charactersIgnoringModifiers: "\u{F702}")
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertEqual(result, .seekBackward10)
     }
 
@@ -146,9 +113,7 @@ final class KeyEventRouterTests: XCTestCase {
         let event = makeEvent(keyCode: 124, modifiers: [],
                               characters: "\u{F703}", charactersIgnoringModifiers: "\u{F703}")
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertEqual(result, .seekForward10)
     }
 
@@ -158,9 +123,7 @@ final class KeyEventRouterTests: XCTestCase {
         let event = makeEvent(keyCode: 123, modifiers: .command,
                               characters: "\u{F702}", charactersIgnoringModifiers: "\u{F702}")
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertEqual(result, .seekBackward60)
     }
 
@@ -170,9 +133,7 @@ final class KeyEventRouterTests: XCTestCase {
         let event = makeEvent(keyCode: 126, modifiers: [],
                               characters: "\u{F700}", charactersIgnoringModifiers: "\u{F700}")
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertEqual(result, .volumeUp)
     }
 
@@ -182,9 +143,7 @@ final class KeyEventRouterTests: XCTestCase {
         let event = makeEvent(keyCode: 125, modifiers: [],
                               characters: "\u{F701}", charactersIgnoringModifiers: "\u{F701}")
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertEqual(result, .volumeDown)
     }
 
@@ -195,9 +154,7 @@ final class KeyEventRouterTests: XCTestCase {
         let router = KeyEventRouter(shortcutManager: mgr)
         let event = makeEvent(keyCode: 3, modifiers: [.command, .shift])
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertNil(result)
     }
 
@@ -227,9 +184,7 @@ final class KeyEventRouterTests: XCTestCase {
             isARepeat: false, keyCode: 46
         )!
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertNil(result, "Should not dispatch when NSTextView is first responder")
     }
 
@@ -256,9 +211,7 @@ final class KeyEventRouterTests: XCTestCase {
             isARepeat: false, keyCode: 46
         )!
 
-        let result = withLayout(qwertyProvider()) {
-            router.action(for: event)
-        }
+        let result = router.action(for: event)
         XCTAssertNil(result, "Should not dispatch when NSTextField field editor is active")
     }
 
@@ -268,7 +221,7 @@ final class KeyEventRouterTests: XCTestCase {
         let defaults = UserDefaults(suiteName: "router-custom-\(UUID())")!
         let mgr = KeyboardShortcutManager(defaults: defaults)
         try? mgr.setBinding(
-            KeyBinding(action: .togglePlayPause, key: "p", modifiers: []),
+            KeyBinding(action: .togglePlayPause, keyCode: 35),  // P
             for: .togglePlayPause
         )
         let router = KeyEventRouter(shortcutManager: mgr)
@@ -276,24 +229,23 @@ final class KeyEventRouterTests: XCTestCase {
         let spaceEvent = makeEvent(keyCode: 49, characters: " ", charactersIgnoringModifiers: " ")
         let pEvent = makeEvent(keyCode: 35)
 
-        let resultSpace = withLayout(qwertyProvider()) {
-            router.action(for: spaceEvent)
-        }
-        let resultP = withLayout(qwertyProvider()) {
-            router.action(for: pEvent)
-        }
+        let resultSpace = router.action(for: spaceEvent)
+        let resultP = router.action(for: pEvent)
         XCTAssertNil(resultSpace, "Old binding should no longer match")
         XCTAssertEqual(resultP, .togglePlayPause)
     }
-}
 
-// MARK: - Fake layout provider
+    // MARK: - Scan-code matching (bypasses PhysicalKeyResolver)
 
-private struct FakeKeyboardLayoutProvider: KeyboardLayoutProviding {
-    let mapping: [UInt16: String]
+    func testScanCodeMatchingBypassesPhysicalKeyResolver() {
+        let mgr = makeManager()
+        let router = KeyEventRouter(shortcutManager: mgr)
 
-    func character(for keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> String? {
-        mapping[keyCode]
+        // keyCode 46 = M, regardless of what PhysicalKeyResolver returns
+        let event = makeEvent(keyCode: 46)
+
+        let result = router.action(for: event)
+        XCTAssertEqual(result, .toggleMute)
     }
 }
 

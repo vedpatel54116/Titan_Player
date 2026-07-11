@@ -32,25 +32,25 @@ enum PlayerAction: String, CaseIterable, Codable {
 
 struct KeyBinding: Equatable {
     let action: PlayerAction
-    let key: String
+    let keyCode: UInt16
     let modifiers: NSEvent.ModifierFlags
 
-    init(action: PlayerAction, key: String, modifiers: NSEvent.ModifierFlags = []) {
+    init(action: PlayerAction, keyCode: UInt16, modifiers: NSEvent.ModifierFlags = []) {
         self.action = action
-        self.key = key
+        self.keyCode = keyCode
         self.modifiers = modifiers
     }
 }
 
 extension KeyBinding: Codable {
     private enum CodingKeys: String, CodingKey {
-        case action, key, modifiers
+        case action, keyCode, modifiers
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         action = try c.decode(PlayerAction.self, forKey: .action)
-        key = try c.decode(String.self, forKey: .key)
+        keyCode = try c.decode(UInt16.self, forKey: .keyCode)
         let raw = try c.decode(UInt.self, forKey: .modifiers)
         modifiers = NSEvent.ModifierFlags(rawValue: raw)
     }
@@ -58,7 +58,7 @@ extension KeyBinding: Codable {
     func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(action, forKey: .action)
-        try c.encode(key, forKey: .key)
+        try c.encode(keyCode, forKey: .keyCode)
         try c.encode(modifiers.rawValue, forKey: .modifiers)
     }
 }

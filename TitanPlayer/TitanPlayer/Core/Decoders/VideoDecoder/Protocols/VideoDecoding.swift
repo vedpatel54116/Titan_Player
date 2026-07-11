@@ -11,6 +11,7 @@ enum DecoderError: Error, LocalizedError, Sendable {
     case noFramesDecoded
     case hardwareFailure
     case softwareFailure
+    case noDecodersAvailable
     
     enum ErrorSeverity: Sendable {
         case transient
@@ -26,6 +27,8 @@ enum DecoderError: Error, LocalizedError, Sendable {
         case .hardwareFailure:
             return .transient
         case .softwareFailure:
+            return .persistent
+        case .noDecodersAvailable:
             return .persistent
         }
     }
@@ -44,6 +47,8 @@ enum DecoderError: Error, LocalizedError, Sendable {
             return "Hardware decoding failed"
         case .softwareFailure:
             return "Software decoding failed"
+        case .noDecodersAvailable:
+            return "No decoders available for the selected track"
         }
     }
 }
@@ -54,7 +59,11 @@ protocol VideoDecoding: AnyObject, Sendable {
     var outputFormat: DecoderOutputFormat { get }
     var capabilities: DecoderCapabilities { get }
     var state: DecoderState { get }
-    
+
+    /// The actual pixel format negotiated/used for output buffers, if known.
+    /// Used by the Decoder Health panel. Defaults to `nil`.
+    var negotiatedPixelFormat: OSType? { get }
+
     func configure(for track: VideoTrackInfo) async throws
     func decode(_ packet: MediaPacket) async throws -> DecoderOutput
     func flush() async
@@ -67,4 +76,5 @@ protocol VideoDecoding: AnyObject, Sendable {
 extension VideoDecoding {
     func flush() async {}
     func reset() async {}
+    var negotiatedPixelFormat: OSType? { nil }
 }

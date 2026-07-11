@@ -43,6 +43,9 @@ final class StreamingManager: ObservableObject {
     private var variantObserver: HLSVariantObserver?
     private var cancellables: Set<AnyCancellable> = []
 
+    private var dashPlayer: (any DASHPlayer)?
+    private var dashSession: DASHStreamSession?
+
     init(
         hlsPlayer: any HLSPlayerProtocol,
         cache: any StreamingCacheProtocol,
@@ -58,9 +61,14 @@ final class StreamingManager: ObservableObject {
 
     /// Convenience initializer that constructs default production components.
     static func makeDefault() -> StreamingManager {
-        StreamingManager(
+        let cache = StreamingCache()
+        // The production cache needs its AVAssetDownload delegate attached
+        // after construction (the delegate holds a back-reference to the cache).
+        let productionCache = ProductionCacheDelegate(cache: cache)
+        cache.attachProductionDelegate(productionCache)
+        return StreamingManager(
             hlsPlayer: HLSPlayer(),
-            cache: StreamingCache(),
+            cache: cache,
             networkMonitor: NetworkMonitor(),
             statsPublisher: PlaybackStatsPublisher()
         )
@@ -89,7 +97,8 @@ final class StreamingManager: ObservableObject {
             Task {
                 do {
                     let session = try await dashPlayer.streamSession(for: url)
-                    _ = session
+                    self.dashPlayer = dashPlayer
+                    self.dashSession = session
                     streamingState = .ready
                     currentQuality = .auto
                     availableQualities = await dashPlayer.currentVariants
@@ -112,6 +121,9 @@ final class StreamingManager: ObservableObject {
         variantObserver?.detach()
         variantObserver = nil
         statsPublisher.detach()
+        dashSession?.close()
+        dashSession = nil
+        dashPlayer = nil
         streamingState = .idle
         currentQuality = .auto
         availableQualities = []

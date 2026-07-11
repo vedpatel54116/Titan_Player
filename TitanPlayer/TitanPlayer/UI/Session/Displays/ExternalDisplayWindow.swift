@@ -38,7 +38,9 @@ final class ExternalDisplayWindow {
         hostView.layer?.addSublayer(metalLayer)
         win.contentView = hostView
 
-        win.makeKeyAndOrderFront(nil)
+        // Order the window to the front without making it key, so the main
+        // player window keeps keyboard focus (and fullscreen toggles target it).
+        win.orderFront(nil)
         self.window = win
     }
 

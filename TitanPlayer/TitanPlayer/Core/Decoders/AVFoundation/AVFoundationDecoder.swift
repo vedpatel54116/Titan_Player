@@ -14,7 +14,7 @@ class AVFoundationDecoder: MediaDecoding {
     
     func decode(_ packet: MediaPacket) async throws -> MediaFrame {
         // Decode packet using VideoToolbox
-        let pixelBuffer = createEmptyPixelBuffer()
+        let pixelBuffer = try createEmptyPixelBuffer()
         
         return .video(VideoFrame(
             pixelBuffer: pixelBuffer,
@@ -34,20 +34,24 @@ class AVFoundationDecoder: MediaDecoding {
         formatDescription = nil
     }
     
-    private func createEmptyPixelBuffer() -> CVPixelBuffer {
+    private func createEmptyPixelBuffer() throws -> CVPixelBuffer {
         var pixelBuffer: CVPixelBuffer?
         let attrs = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
         ] as CFDictionary
-        
-        CVPixelBufferCreate(
+
+        let status = CVPixelBufferCreate(
             kCFAllocatorDefault,
             1920, 1080,
             kCVPixelFormatType_32BGRA,
             attrs,
             &pixelBuffer
         )
-        
-        return pixelBuffer!
+
+        guard status == kCVReturnSuccess, let created = pixelBuffer else {
+            throw DecoderError.bufferCreationFailed(status)
+        }
+
+        return created
     }
 }

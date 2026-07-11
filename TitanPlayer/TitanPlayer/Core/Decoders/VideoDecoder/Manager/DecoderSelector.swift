@@ -46,9 +46,9 @@ struct DecoderSelector {
     // MARK: - Selection Logic
 
     func selectDecoder(for track: VideoTrackInfo,
-                       available: [VideoDecoding],
-                       systemState: SystemState,
-                       preference: DecoderPreference = .neutral) -> DecoderSelection {
+                        available: [VideoDecoding],
+                        systemState: SystemState,
+                        preference: DecoderPreference = .neutral) throws -> DecoderSelection {
 
         let scored = available.map { decoder in
             (decoder: decoder, score: calculateScore(for: decoder, track: track, systemState: systemState, preference: preference))
@@ -57,7 +57,7 @@ struct DecoderSelector {
         let sorted = scored.sorted { $0.score.score > $1.score.score }
 
         guard let best = sorted.first else {
-            return DecoderSelection(decoder: available.first!, reason: .fallback)
+            throw DecoderError.noDecodersAvailable
         }
 
         return DecoderSelection(decoder: best.decoder, reason: best.score.reasons.first ?? .fallback)

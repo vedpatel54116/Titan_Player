@@ -12,16 +12,18 @@ final class DASHPlayerImpl: DASHPlayer {
     func streamSession(for url: URL) async throws -> DASHStreamSession {
         let manifest = try await MPDParser.parse(url: url)
         let qualities = manifest.allVideoQualities
-        let lowest = manifest.lowestVideoQuality
+        guard let lowest = manifest.lowestVideoQuality, !qualities.isEmpty else {
+            throw StreamingError.dashNotSupported(url)
+        }
 
-        let controller = DASHABRController(qualities: qualities, initial: lowest)
+        let controller = try DASHABRController(qualities: qualities, initial: lowest)
         self.abrController = controller
 
         let session = DASHStreamSession(
             manifest: manifest,
             manifestURL: url,
             abrController: controller,
-            initialQuality: lowest!
+            initialQuality: lowest
         )
         _ = try await session.open()
 

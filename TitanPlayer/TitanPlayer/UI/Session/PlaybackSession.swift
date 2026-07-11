@@ -28,6 +28,16 @@ final class PlaybackSession: ObservableObject {
     @Published var toneMappingEnabled: Bool = true
     @Published var brightness: Float = 1.0
 
+    // Debug overlay state
+    @Published var debugPixelFormat: String = "none"
+    @Published var debugPipelineState: String = "idle"
+    @Published var debugPendingFrameCount: Int = 0
+
+    // Decoder health (from AdaptiveDecoderManager)
+    @Published var decoderHealth: DecoderHealth = DecoderHealth(
+        activeDecoder: "none", fallbackCount: 0, lastErrorCode: nil, pixelFormat: nil
+    )
+
     @Published var subtitleFontSize: Float = 1.0
     @Published var subtitlePosition: SubtitlePosition = .bottom
     @Published var subtitleBackgroundOpacity: Float = 0.6
@@ -49,7 +59,7 @@ final class PlaybackSession: ObservableObject {
     let streaming: StreamingManager
     let performance: PerformanceOptimizer
 
-    private var keyMonitorToken: Any?
+    nonisolated(unsafe) private var keyMonitorToken: Any?
 
     private let engine: PlaybackEngine
     var avPlayer: AVPlayer { engine.avPlayer }
@@ -107,6 +117,8 @@ final class PlaybackSession: ObservableObject {
                 return "Failed to open \"\(name)\": Hardware decoder failure. The device may not support this codec."
             case .softwareFailure:
                 return "Failed to open \"\(name)\": Software decoder failure."
+            case .noDecodersAvailable:
+                return "Failed to open \"\(name)\": No decoder is available for this track."
             }
         }
         if let nsError = error as NSError? {
@@ -191,8 +203,15 @@ final class PlaybackSession: ObservableObject {
             name: NSApplication.willTerminateNotification,
             object: nil
         )
-        Task.detached(priority: .background) { [performance] in
+        Task { @MainActor in
             performance.startPerformanceMonitor()
+        }
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+        if let token = keyMonitorToken {
+            NSEvent.removeMonitor(token)
         }
     }
 
@@ -339,12 +358,19 @@ final class PlaybackSession: ObservableObject {
     }
 
     func stop() {
+        debugTimer?.invalidate()
+        debugTimer = nil
         engine.teardown()
         engine.stop()
         subtitleManager.clear()
         performance.observe(settings: nil)
         stopAccessingCurrentResource()
         displayCoordinator.stop()
+        if let token = keyMonitorToken {
+            NSEvent.removeMonitor(token)
+            keyMonitorToken = nil
+        }
+        NotificationCenter.default.removeObserver(self)
     }
 
     @objc private func applicationWillTerminate() {
@@ -388,6 +414,9 @@ final class PlaybackSession: ObservableObject {
         engine.$compatibilityMode
             .receive(on: DispatchQueue.main)
             .assign(to: &$isCompatibilityMode)
+        engine.adaptiveDecoderManager.decoderHealthPublisher
+            .receive(on: DispatchQueue.main)
+            .assign(to: &$decoderHealth)
         subtitleManager.$availableTracks
             .receive(on: DispatchQueue.main)
             .assign(to: &$subtitles)
@@ -400,6 +429,36 @@ final class PlaybackSession: ObservableObject {
         subtitleManager.$currentBitmap
             .receive(on: DispatchQueue.main)
             .assign(to: &$currentSubtitleBitmap)
+
+        // Poll MetalRenderer debug state at 2 Hz
+        debugTimer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+            self?.updateDebugState()
+        }
+    }
+
+    private var debugTimer: Timer?
+
+    private func updateDebugState() {
+        guard let metalRenderer = renderer as? MetalRenderer else {
+            debugPixelFormat = "n/a"
+            debugPipelineState = "no renderer"
+            debugPendingFrameCount = 0
+            return
+        }
+        let fmt = metalRenderer.lastPixelFormat
+        debugPixelFormat = fmt != 0 ? fourCharCodeDebug(fmt) : "none"
+        debugPipelineState = metalRenderer.debugPipelineState
+        debugPendingFrameCount = metalRenderer.pendingFrameCount
+    }
+
+    private func fourCharCodeDebug(_ code: OSType) -> String {
+        let bytes = [
+            UInt8((code >> 24) & 0xFF),
+            UInt8((code >> 16) & 0xFF),
+            UInt8((code >> 8) & 0xFF),
+            UInt8(code & 0xFF)
+        ]
+        return String(bytes: bytes, encoding: .ascii) ?? String(format: "0x%08X", code)
     }
 
     /// Wire the audio tap via direct dependency injection through
@@ -448,8 +507,19 @@ final class PlaybackSession: ObservableObject {
                 dispatcher.dispatch(action)
                 return nil   // consumed
             }
+
+            // Cmd+Shift+D: toggle debug overlay
+            if event.modifierFlags.contains(.command),
+               event.modifierFlags.contains(.shift),
+               event.charactersIgnoringModifiers == "d" {
+                NotificationCenter.default.post(name: .toggleDebugOverlay, object: nil)
+                return nil
+            }
+
             return event   // not consumed
         }
+
+        KeyboardLayoutMonitor.detectLayout()
     }
 }
 

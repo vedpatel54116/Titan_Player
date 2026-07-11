@@ -21,7 +21,7 @@ class DolbyVisionParser {
     }
     
     func parseRPUData(_ rpuData: Data, profile: DolbyVisionProfile) -> DolbyVisionRPUMetadata? {
-        guard rpuData.count >= 4 else { return nil }
+        guard rpuData.count >= 5 else { return nil }
         
         let reader = DataReader(data: rpuData)
         
@@ -31,7 +31,11 @@ class DolbyVisionParser {
             let targetMinLum = try reader.readBits(16)
             
             var trimPasses: [DolbyVisionTrimPass] = []
-            while reader.hasMoreBits {
+            // Each trim pass is 48 bits. The RPU trailer carries a 64-bit
+            // active-area offset block, so stop reading trim passes once only
+            // the trailing offset block (or less) remains. Reading to EOF would
+            // have consumed those offsets as bogus trim passes.
+            while reader.remainingBits > 64 {
                 let percentile = try reader.readBits(8)
                 let targetMax = try reader.readBits(16)
                 let targetMin = try reader.readBits(16)
@@ -52,7 +56,7 @@ class DolbyVisionParser {
             }
             
             var activeAreaOffsets: DolbyVisionActiveAreaOffsets? = nil
-            if reader.hasMoreBits {
+            if reader.remainingBits == 64 {
                 let top = try reader.readBits(16)
                 let bottom = try reader.readBits(16)
                 let left = try reader.readBits(16)

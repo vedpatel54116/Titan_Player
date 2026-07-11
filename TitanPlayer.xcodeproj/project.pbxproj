@@ -146,7 +146,6 @@
 		BD385774F2C1262C1B3EA601 /* Libavformat in Frameworks */ = {isa = PBXBuildFile; productRef = D8A4736597E0398A0280B455 /* Libavformat */; };
 		BF49473E9139EAD26DF13F63 /* AVFoundationDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = E745E8286632EB0EFE8FB6B9 /* AVFoundationDecoder.swift */; };
 		BFCD6221090C60D73DBC7C19 /* VideoDecoding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 95B1D4CBE660A3D51C8427AC /* VideoDecoding.swift */; };
-		C0DB2F5922F344EDFF94EDE0 /* KeyEquivalentResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5AA0A121D2534E93232C98ED /* KeyEquivalentResolver.swift */; };
 		C6EC70CB3A683FA950684848 /* AudioTapProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = E370750B3712EC35A8D5B902 /* AudioTapProvider.swift */; };
 		CAF929A0CC8FE63FC9E78154 /* ShortcutDisplayFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 022371BB2454B6F334DDE668 /* ShortcutDisplayFormatter.swift */; };
 		CC44539C6E408830B4640DDB /* StreamingManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 83450C91906EF10C2AFC4078 /* StreamingManager.swift */; };
@@ -239,7 +238,6 @@
 		54AA828A693E9E907ECCBF78 /* BookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BookmarkStore.swift; sourceTree = "<group>"; };
 		58E7EEA037C60DC5DD7F1D32 /* NotImplementedDASHPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotImplementedDASHPlayer.swift; sourceTree = "<group>"; };
 		59656A2F099F9DBE600DD4A3 /* AudioMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMetadata.swift; sourceTree = "<group>"; };
-		5AA0A121D2534E93232C98ED /* KeyEquivalentResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeyEquivalentResolver.swift; sourceTree = "<group>"; };
 		5C3227595CED148541C540B8 /* AudioClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioClock.swift; sourceTree = "<group>"; };
 		5E16F567EB01D79E04CAD28A /* GPUDeviceSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GPUDeviceSelection.swift; sourceTree = "<group>"; };
 		5E1BEBE1556F90D3BA853E7B /* AudioMeteringData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioMeteringData.swift; sourceTree = "<group>"; };
@@ -489,7 +487,6 @@
 			isa = PBXGroup;
 			children = (
 				206B7CDA53A17BBA94BEBB35 /* KeyboardShortcutManager.swift */,
-				5AA0A121D2534E93232C98ED /* KeyEquivalentResolver.swift */,
 				422508049B2B7B5568787A0D /* KeyEventRouter.swift */,
 				CE98782E2329318632183CE5 /* KeyListenerView.swift */,
 				C9EC23CE41C5783FC0E5EB4F /* PlayerAction.swift */,
@@ -1092,7 +1089,6 @@
 				B2346AF7077A78A3FD4A878B /* HeadTrackingManager.swift in Sources */,
 				F410DE61939AADF9D30AFB72 /* HistogramView.swift in Sources */,
 				751C915604A96E5ABAE668D4 /* InspectorView.swift in Sources */,
-				C0DB2F5922F344EDFF94EDE0 /* KeyEquivalentResolver.swift in Sources */,
 				7E1850F7CBED16206CC1DF76 /* KeyEventRouter.swift in Sources */,
 				5EA5EEA7C2B06D76727D3C71 /* KeyListenerView.swift in Sources */,
 				1038EFAF2C45CBA432057E4A /* KeyboardShortcutManager.swift in Sources */,

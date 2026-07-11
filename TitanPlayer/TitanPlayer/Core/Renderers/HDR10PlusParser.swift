@@ -161,7 +161,17 @@ class DataReader {
             bitsRead += 1
         }
         
+        // If the stream ended before we read the requested number of bits,
+        // return an error rather than a silently-truncated (incorrect) value.
+        guard bitsRead == count else {
+            throw DataReaderError.endOfData
+        }
+        
         return result
+    }
+    
+    var remainingBits: Int {
+        max(0, data.count * 8 - bitOffset)
     }
     
     func readBytes(_ count: Int) throws -> Data {

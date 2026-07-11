@@ -82,7 +82,7 @@ class MetadataPassthroughManager {
             let displayInfo = ExternalDisplayInfo(
                 displayID: screenNumber,
                 supportsHDR: capabilities.supportsHDR,
-                supportsDolbyVision: capabilities.supportsHDR,
+                supportsDolbyVision: Self.inferDolbyVisionSupport(from: capabilities),
                 maxLuminance: capabilities.maxEDRLuminance,
                 colorGamut: capabilities.colorGamut,
                 lastMetadataTimestamp: Date()
@@ -96,9 +96,22 @@ class MetadataPassthroughManager {
         let detector = DisplayCapabilityDetector()
         return detector.detectCapabilities(for: screen)
     }
+
+    /// Dolby Vision requires an HDR10/PQ-capable pipeline. We can't read EDID
+    /// here, so we conservatively infer DV support only for displays that
+    /// advertise EDR *and* a BT.2020 gamut. Plain HDR10/P3 displays must not be
+    /// reported as DV-capable, otherwise DV metadata would be passed through to
+    /// displays that cannot consume it (and the DV→HDR10 fallback would never
+    /// trigger).
+    private static func inferDolbyVisionSupport(from capabilities: DisplayCapabilities) -> Bool {
+        capabilities.supportsEDR && capabilities.colorGamut == .bt2020
+    }
     
     private func passthroughToAllDisplays(_ metadata: PassthroughMetadata) {
-        for (displayID, _) in externalDisplays {
+        // Iterate over a snapshot of the keys so we don't mutate the dictionary
+        // while it is being enumerated.
+        let displayIDs = Array(externalDisplays.keys)
+        for displayID in displayIDs {
             passthroughToSpecificDisplay(metadata, displayID: displayID)
         }
     }

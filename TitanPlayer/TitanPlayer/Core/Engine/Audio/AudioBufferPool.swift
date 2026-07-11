@@ -7,15 +7,26 @@ final class AudioBufferPool {
     func dequeueBuffer(for format: AVAudioFormat, frameCount: AVAudioFrameCount) -> AVAudioPCMBuffer {
         lock.lock()
         defer { lock.unlock() }
-        
+
         if var buffers = availableBuffers[format], !buffers.isEmpty {
-            let buffer = buffers.removeLast()
-            availableBuffers[format] = buffers
-            buffer.frameLength = frameCount
-            return buffer
+            // Reuse a cached buffer only if its capacity is large enough to
+            // hold `frameCount` frames; otherwise we would overflow its
+            // allocation when the caller copies `frameCount` samples.
+            while let buffer = buffers.popLast() {
+                if buffer.frameCapacity >= frameCount {
+                    buffer.frameLength = frameCount
+                    availableBuffers[format] = buffers
+                    return buffer
+                }
+                // Too small to satisfy this request — drop it.
+            }
+            availableBuffers[format] = []
         }
-        
-        return AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount)!
+
+        guard let newBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount) else {
+            preconditionFailure("AudioBufferPool: unable to create buffer for format \(format) capacity \(frameCount)")
+        }
+        return newBuffer
     }
     
     func enqueueBuffer(_ buffer: AVAudioPCMBuffer) {

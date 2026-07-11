@@ -105,16 +105,7 @@ struct TitanCommands: Commands {
 
     @ViewBuilder
     private func menuButton(_ title: String, action: PlayerAction) -> some View {
-        let binding = session.shortcutManager.binding(for: action)
-        let resolved = binding.flatMap {
-            KeyEquivalentResolver.resolve(key: $0.key, modifiers: $0.modifiers)
-        }
-        if let resolved {
-            Button(title) { dispatcher.dispatch(action) }
-                .keyboardShortcut(resolved.equivalent, modifiers: resolved.modifiers)
-        } else {
-            Button(title) { dispatcher.dispatch(action) }
-        }
+        Button(title) { dispatcher.dispatch(action) }
     }
 
     static func openLibraryPanel() {

@@ -27,7 +27,7 @@ final class StreamingCache: ObservableObject, StreamingCacheProtocol {
     @Published private(set) var availableDownloads: [DownloadedAssetInfo] = []
     @Published private(set) var activeDownloads: [ActiveDownload] = []
 
-    let productionDelegate: ProductionCacheDelegate?
+    var productionDelegate: ProductionCacheDelegate?
 
     private var lifecycleDelegate: StreamCacheLifecycleDelegate?
     private var pendingContinuations: [String: CheckedContinuation<DownloadedAssetInfo, Error>] = [:]
@@ -35,6 +35,14 @@ final class StreamingCache: ObservableObject, StreamingCacheProtocol {
     init(productionDelegate: ProductionCacheDelegate? = nil) {
         self.productionDelegate = productionDelegate
         self.lifecycleDelegate = productionDelegate
+    }
+
+    /// Wires the production AVAssetDownload delegate. This must be called after
+    /// the cache is constructed (the delegate needs a reference back to the
+    /// cache), otherwise `downloadAsset` silently never starts a task.
+    func attachProductionDelegate(_ delegate: ProductionCacheDelegate) {
+        self.productionDelegate = delegate
+        self.lifecycleDelegate = delegate
     }
 
     func attachLifecycleDelegate(_ delegate: StreamCacheLifecycleDelegate) {
@@ -59,7 +67,7 @@ final class StreamingCache: ObservableObject, StreamingCacheProtocol {
         )
         activeDownloads.append(placeholder)
         lifecycleDelegate?.cache(self, didStart: id, url: url)
-        productionDelegate?.register(id: id)
+        productionDelegate?.register(id: id, url: url)
 
         return try await withCheckedThrowingContinuation { continuation in
             pendingContinuations[id] = continuation
@@ -68,8 +76,12 @@ final class StreamingCache: ObservableObject, StreamingCacheProtocol {
 
     func cancelDownload(id: String) async throws {
         productionDelegate?.cancel(id: id)
-        pendingContinuations[id]?.resume(throwing: StreamingError.downloadFailed("Cancelled"))
-        pendingContinuations.removeValue(forKey: id)
+        // Resume at most once by reading-and-removing the continuation
+        // atomically; otherwise a concurrent finish/fail could double-resume
+        // and trap ("SWIFT TASK CONTINUATION MISUSE").
+        if let cont = pendingContinuations.removeValue(forKey: id) {
+            cont.resume(throwing: StreamingError.downloadFailed("Cancelled"))
+        }
         activeDownloads.removeAll { $0.id == id }
     }
 
@@ -115,14 +127,52 @@ final class StreamingCache: ObservableObject, StreamingCacheProtocol {
 final class ProductionCacheDelegate: NSObject, StreamCacheLifecycleDelegate, AVAssetDownloadDelegate {
     nonisolated(unsafe) private weak var cache: StreamingCache?
     private var taskByID: [String: AVAggregateAssetDownloadTask] = [:]
+    /// Maps a real `AVAggregateAssetDownloadTask.taskIdentifier` (an Int
+    /// assigned by URLSession) back to the UUID used as the cache's
+    /// continuation / download key.
+    private var uuidByTaskIdentifier: [Int: String] = [:]
+
+    private lazy var downloadSession: AVAssetDownloadURLSession = {
+        let configuration = URLSessionConfiguration.background(
+            withIdentifier: "com.titanplayer.assetdownload"
+        )
+        return AVAssetDownloadURLSession(
+            configuration: configuration,
+            assetDownloadDelegate: self,
+            delegateQueue: nil
+        )
+    }()
 
     init(cache: StreamingCache) {
         self.cache = cache
     }
 
-    func register(id: String) { }
+    func register(id: String, url: URL) {
+        guard url.pathExtension == "m3u8" else { return }
 
-    func cancel(id: String) { taskByID[id]?.cancel() }
+        let asset = AVURLAsset(url: url)
+        guard let task = downloadSession.aggregateAssetDownloadTask(
+            with: asset,
+            mediaSelections: [],
+            assetTitle: url.lastPathComponent,
+            assetArtworkData: nil,
+            options: nil
+        ) else {
+            cache?._handleFail(id: id, error: StreamingError.downloadFailed("Unable to create aggregate asset download task"))
+            return
+        }
+
+        uuidByTaskIdentifier[task.taskIdentifier] = id
+        startDownloadTask(task: task, id: id)
+        task.resume()
+    }
+
+    func cancel(id: String) {
+        if let task = taskByID[id] {
+            uuidByTaskIdentifier[task.taskIdentifier] = nil
+            task.cancel()
+        }
+    }
 
     func startDownloadTask(task: AVAggregateAssetDownloadTask, id: String) {
         taskByID[id] = task
@@ -162,6 +212,7 @@ final class ProductionCacheDelegate: NSObject, StreamCacheLifecycleDelegate, AVA
                     totalTimeRangesLoaded loadedTimeRanges: [NSValue],
                     timeRangeExpectedToLoad expected: CMTimeRange,
                     for mediaSelection: AVMediaSelection) {
+        let taskID = task.taskIdentifier
         let loadedFraction: Double
         if expected.duration.seconds > 0 {
             let loaded = loadedTimeRanges.reduce(0.0) { acc, ns in
@@ -171,19 +222,21 @@ final class ProductionCacheDelegate: NSObject, StreamCacheLifecycleDelegate, AVA
         } else {
             loadedFraction = 0
         }
-        let id = String(task.taskIdentifier)
         let totalBytes: Int64 = Int64(expected.duration.seconds * 5_000_000)
         let bytes: Int64 = Int64(Double(totalBytes) * loadedFraction)
         Task { @MainActor [weak cache] in
+            guard let id = uuidByTaskIdentifier[taskID] else { return }
             cache?._handleProgress(id: id, progress: loadedFraction, bytes: bytes, totalBytes: totalBytes)
         }
     }
 
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        guard let task = task as? AVAggregateAssetDownloadTask else { return }
-        let id = String(task.taskIdentifier)
+        guard let downloadTask = task as? AVAggregateAssetDownloadTask else { return }
+        let taskID = downloadTask.taskIdentifier
         Task { @MainActor [weak cache] in
             guard let cache else { return }
+            guard let id = uuidByTaskIdentifier[taskID] else { return }
+            uuidByTaskIdentifier[taskID] = nil
             if let error {
                 cache._handleFail(id: id, error: error)
                 return
