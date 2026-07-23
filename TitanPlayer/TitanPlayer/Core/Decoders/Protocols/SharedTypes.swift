@@ -90,17 +90,3 @@ enum HDRType {
     case dolbyVision
     case hlg
 }
-
-struct MediaError: Error, LocalizedError {
-    let code: ErrorCode
-    let message: String
-    
-    enum ErrorCode: Int {
-        case fileNotFound = 1
-        case unsupportedFormat = 2
-        case decodingFailed = 3
-        case networkError = 4
-    }
-    
-    var errorDescription: String? { message }
-}

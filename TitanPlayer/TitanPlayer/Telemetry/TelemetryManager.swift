@@ -107,6 +107,65 @@ final class TelemetryManager: ObservableObject, TelemetryProviding {
                 "source": source.rawValue
             ]
             sentryEvent.level = .warning
+
+        case .frameCacheEvicted(let count, let reason):
+            sentryEvent.message = SentryMessage(formatted: "frame_cache_evicted")
+            sentryEvent.tags = [
+                "reason": reason
+            ]
+            sentryEvent.extra = ["count": count]
+
+        case .networkStateChanged(let previous, let current, let expensive, let constrained, let source):
+            sentryEvent.message = SentryMessage(formatted: "network_state_changed")
+            sentryEvent.tags = [
+                "previous": previous,
+                "current": current,
+                "expensive": expensive ? "true" : "false",
+                "constrained": constrained ? "true" : "false",
+                "source": source.rawValue
+            ]
+
+        case .drmKeyLoaded(let source):
+            sentryEvent.message = SentryMessage(formatted: "drm_key_loaded")
+            sentryEvent.tags = [
+                "source": source.rawValue
+            ]
+
+        case .displayCapabilitiesDetected(let stableID, let supportsHDR, let supportsEDR, let colorGamut, let source):
+            sentryEvent.message = SentryMessage(formatted: "display_capabilities_detected")
+            sentryEvent.tags = [
+                "stable_id": stableID,
+                "supports_hdr": supportsHDR ? "true" : "false",
+                "supports_edr": supportsEDR ? "true" : "false",
+                "color_gamut": colorGamut,
+                "source": source.rawValue
+            ]
+
+        case .displayDetectionFailed(let errorCode, let source):
+            sentryEvent.message = SentryMessage(formatted: "display_detection_failed")
+            sentryEvent.level = .error
+            sentryEvent.tags = [
+                "error_code": errorCode,
+                "source": source.rawValue
+            ]
+
+        case .spotlightIndexed(let count, let duration, let source):
+            sentryEvent.message = SentryMessage(formatted: "spotlight_indexed")
+            sentryEvent.tags = [
+                "source": source.rawValue
+            ]
+            sentryEvent.extra = [
+                "count": count,
+                "duration_seconds": duration
+            ]
+
+        case .spotlightIndexingFailed(let errorCode, let source):
+            sentryEvent.message = SentryMessage(formatted: "spotlight_indexing_failed")
+            sentryEvent.level = .error
+            sentryEvent.tags = [
+                "error_code": errorCode,
+                "source": source.rawValue
+            ]
         }
         
         SentrySDK.capture(event: sentryEvent)

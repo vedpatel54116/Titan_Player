@@ -1,6 +1,6 @@
 import Foundation
 
-enum Reach: Equatable, Codable {
+public enum Reach: Equatable, Codable, Sendable {
     case offline
     case wifi
     case cellular

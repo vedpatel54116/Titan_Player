@@ -1,37 +1,41 @@
-import Foundation
-import AppKit
-import Metal
+//
+//  FrameRendering.swift
+//  TitanPlayer
+//
+//  Protocol for video frame renderers.
+//
 
-typealias VideoRenderer = FrameRendering
+import MetalKit
+import CoreVideo
 
+/// A renderer that can display decoded video frames.
 protocol FrameRendering: AnyObject {
+    /// Attach the renderer to an MTKView.
+    func attach(to view: MTKView)
+
+    /// Detach the renderer from its view.
+    func detach()
+
+    /// Render a decoded video frame.
     func render(_ frame: VideoFrame) async throws
-    func handleHDR(_ metadata: HDRMetadata)
-    func updateDisplayCapabilities(for screen: NSScreen)
-    func resetDynamicHDRParams()
 
-    func addDisplayTarget(stableID: String, layer: CAMetalLayer, capabilities: DisplayCapabilities, iccProfile: ICCProfile)
-    func removeDisplayTarget(stableID: String)
+    /// Flush all queued/pending frames (called on seek).
+    func flushFrames()
+
+    /// Number of frames waiting to be rendered.
+    var pendingFrameCount: Int { get }
+
+    /// Whether the renderer is in fallback mode.
+    var fallbackActive: Bool { get set }
 }
 
-extension FrameRendering {
-    func addDisplayTarget(stableID: String, layer: CAMetalLayer, capabilities: DisplayCapabilities, iccProfile: ICCProfile) {}
-    func removeDisplayTarget(stableID: String) {}
-}
+/// No-op renderer used when Metal is unavailable.
+final class NoOpFrameRenderer: FrameRendering {
+    var fallbackActive = false
+    var pendingFrameCount: Int { 0 }
 
-enum RendererError: Error, LocalizedError {
-    case notAttached
-    case deviceUnavailable
-    case pipelineCreationFailed(String)
-
-    var errorDescription: String? {
-        switch self {
-        case .notAttached:
-            return "Renderer is not attached to a Metal view."
-        case .deviceUnavailable:
-            return "Metal device is unavailable on this system."
-        case .pipelineCreationFailed(let s):
-            return "Failed to create Metal pipeline: \(s)"
-        }
-    }
+    func attach(to view: MTKView) {}
+    func detach() {}
+    func render(_ frame: VideoFrame) async throws {}
+    func flushFrames() {}
 }

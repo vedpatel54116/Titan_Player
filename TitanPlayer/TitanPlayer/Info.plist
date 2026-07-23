@@ -1,60 +1,178 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
-	<key>CFBundleDocumentTypes</key>
-	<array>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>Media Files</string>
-			<key>CFBundleTypeRole</key>
-			<string>Viewer</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.movie</string>
-				<string>public.audiovisual-content</string>
-				<string>com.apple.quicktime-movie</string>
-				<string>public.mpeg-4</string>
-			</array>
-		</dict>
-	</array>
-	<key>CFBundleExecutable</key>
-	<string>$(EXECUTABLE_NAME)</string>
-	<key>CFBundleIdentifier</key>
-	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>CFBundleName</key>
-	<string>TitanPlayer</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
-	<key>CFBundleVersion</key>
-	<string>1</string>
-	<key>LSApplicationCategoryType</key>
-	<string>public.app-category.entertainment</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<false/>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>TitanPlayer uses Apple Events to hand media off to QuickTime or other installed players, and to accept Remote-control commands.</string>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>NSHumanReadableCopyright</key>
-	<string>$(NSHUMANREADABLECOPYRIGHT)</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>TitanPlayer uses the microphone only when you explicitly enable audio capture. Audio is processed locally and never leaves your Mac.</string>
+    <!-- ── Basic App Info ─────────────────────────────────────── -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>Titan Player</string>
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    <key>CFBundleIdentifier</key>
+    <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>$(PRODUCT_NAME)</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.video</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticTermination</key>
+    <false/>
+    <key>NSSupportsSuddenTermination</key>
+    <false/>
 
+    <!-- ── CRITICAL: Document Types (File Associations) ───────── -->
+    <key>CFBundleDocumentTypes</key>
+    <array>
+        <!-- Primary: All movies/video -->
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Video Files</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.movie</string>
+                <string>public.video</string>
+                <string>public.audiovisual-content</string>
+                <string>public.mpeg-4</string>
+                <string>com.apple.quicktime-movie</string>
+                <string>public.mpeg</string>
+                <string>public.mpeg-2-video</string>
+                <string>public.avi</string>
+                <string>com.microsoft.advanced-systems-format</string>
+                <string>public.3gpp</string>
+                <string>public.3gpp2</string>
+            </array>
+        </dict>
+
+        <!-- MKV (Matroska) -->
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Matroska Video</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.matroska.mkv</string>
+            </array>
+        </dict>
+
+        <!-- WebM -->
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>WebM Video</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>org.webmproject.webm</string>
+            </array>
+        </dict>
+
+        <!-- Flash Video -->
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Flash Video</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>com.adobe.flash.video</string>
+            </array>
+        </dict>
+
+        <!-- MPEG Transport Stream -->
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>MPEG Transport Stream</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.mpeg-2-transport-stream</string>
+            </array>
+        </dict>
+
+        <!-- Audio Files -->
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Audio Files</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.audio</string>
+                <string>public.mp3</string>
+                <string>public.aac-audio</string>
+                <string>public.flac</string>
+                <string>public.wav</string>
+                <string>public.aiff-audio</string>
+                <string>com.apple.m4a-audio</string>
+                <string>org.ogg.vorbis</string>
+                <string>org.opus.opus</string>
+            </array>
+        </dict>
+
+        <!-- Playlist Files -->
+        <dict>
+            <key>CFBundleTypeName</key>
+            <string>Playlist Files</string>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>LSHandlerRank</key>
+            <string>Alternate</string>
+            <key>LSItemContentTypes</key>
+            <array>
+                <string>public.m3u-playlist</string>
+                <string>public.pls-playlist</string>
+            </array>
+        </dict>
+    </array>
+
+    <!-- ── CRITICAL: URL Scheme ───────────────────────────────── -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.titanplayer.app</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>titanplayer</string>
+            </array>
+        </dict>
+    </array>
+
+    <!-- ── Privacy Descriptions ───────────────────────────────── -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Titan Player uses the microphone for audio analysis and spatial audio calibration.</string>
+
+    <!-- ── Sentry DSN (injected via build setting) ────────────── -->
+    <key>SentryDSN</key>
+    <string>$(SENTRY_DSN)</string>
 </dict>
 </plist>

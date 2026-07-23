@@ -8,7 +8,7 @@ class LibraryViewModel: ObservableObject {
     @Published var recentlyPlayed: [MediaItem] = []
     @Published var selectedFolder: URL?
     
-    private let supportedExtensions = ["mp4", "mkv", "mov", "avi", "wmv", "flac", "m4v"]
+    private let supportedExtensions = Array(SupportedMediaTypes.allExtensions)
     
     func loadFolder(url: URL) {
         selectedFolder = url

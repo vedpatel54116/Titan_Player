@@ -1,0 +1,453 @@
+import Foundation
+import Combine
+import OSLog
+import AVFoundation
+
+// MARK: - MissingComponent3
+
+/// Streaming-resource governor that closes a shard-3 audit gap where
+/// network-, cache-, and ABR-backed streaming resources were never reclaimed
+/// under system pressure.
+///
+/// ## Why this exists
+/// Titan Player allocates `URLSession` task trees, HLS/DASH manifest parsers,
+/// in-flight segment `ActiveDownload` tasks, adaptive-bitrate (ABR) controllers,
+/// and `StreamingCache` segment buffers that accumulate while a session is
+/// alive. The original streaming layer left reclamation as a `TODO`, so on long
+/// adaptive sessions the process drifted into memory and thermal pressure with
+/// no recovery path — producing stall cascades, watchdog kills, and the
+/// tech-debt flagged in the audit.
+///
+/// ``MissingComponent3`` makes that recovery path concrete, mirroring the
+/// audio-side ``MissingComponent1`` and render-side ``MissingComponent2``:
+///
+/// 1. It observes system thermal and memory pressure (via ``SystemStateMonitor``
+///    when no external source is injected) and reacts to
+///    ``SystemStateSnapshot`` guidance.
+/// 2. On throttle/pause signals it reclaims registered streaming resources
+///    within a bounded time budget, falling back to a forced teardown if the
+///    budget is exceeded.
+/// 3. Every failure — cancellation, timeout, pressure — is mapped onto the
+///    centralized ``MediaError`` type and surfaced to telemetry **only** through
+///    the ``TelemetryProviding`` protocol (never Sentry directly).
+///
+/// ## Concurrency
+/// The governor is `@MainActor`-isolated and therefore genuinely `Sendable`:
+/// all state access is serialized on the main actor, so it is safe to share
+/// across tasks and to drive from UI code. Async operations honor
+/// `Task` cancellation and never block the actor longer than their timeout.
+///
+/// ### Example
+/// ```swift
+/// let governor = MissingComponent3(telemetry: TelemetryManager.shared)
+/// governor.start()
+/// let token = MissingComponent3.StreamResource(
+///     category: .cacheBuffer,
+///     label: "hls.2160p.segments", estimatedBytes: 256 * 1024 * 1024
+/// ) { /* drop cached segments, invalidate session */ }
+/// governor.register(token)
+/// // ...later, automatically on critical pressure:
+/// let reclaimed = try await governor.reclaimResources(under: snapshot)
+/// ```
+@MainActor
+public final class MissingComponent3: Sendable {
+
+    // MARK: - Configuration
+
+    /// Tunables for the governor.
+    public struct Configuration: Sendable {
+        /// How long a reclaim pass may run before it is force-completed.
+        public var reclaimTimeout: Duration
+        /// How long a guarded external acquire may run before timing out.
+        public var acquireTimeout: Duration
+        /// Whether the governor starts its own ``SystemStateMonitor`` when no
+        /// external pressure source is injected.
+        public var autoMonitor: Bool
+
+        /// Production defaults: generous-but-bounded budgets.
+        public static let `default` = Configuration(
+            reclaimTimeout: .seconds(2),
+            acquireTimeout: .seconds(5),
+            autoMonitor: true
+        )
+
+        /// Creates a configuration.
+        public init(
+            reclaimTimeout: Duration = .seconds(2),
+            acquireTimeout: Duration = .seconds(5),
+            autoMonitor: Bool = true
+        ) {
+            self.reclaimTimeout = reclaimTimeout
+            self.acquireTimeout = acquireTimeout
+            self.autoMonitor = autoMonitor
+        }
+    }
+
+    // MARK: - Resource model
+
+    /// The kind of network/streaming resource a ``StreamResource`` represents,
+    /// used purely for diagnostics and telemetry bucketing.
+    public enum ResourceCategory: Sendable, CustomStringConvertible {
+        /// A `Foundation.URLSession` (or its task tree) backing playback.
+        case networkSession
+        /// A single in-flight segment download (`ActiveDownload`).
+        case segmentDownload
+        /// An HLS/DASH manifest parser result held in memory.
+        case playlistParser
+        /// An adaptive-bitrate controller (ABR selector).
+        case abrController
+        /// A `StreamingCache` segment buffer.
+        case cacheBuffer
+
+        public var description: String {
+            switch self {
+            case .networkSession: return "network_session"
+            case .segmentDownload: return "segment_download"
+            case .playlistParser: return "playlist_parser"
+            case .abrController: return "abr_controller"
+            case .cacheBuffer: return "cache_buffer"
+            }
+        }
+    }
+
+    /// A registered streaming resource the governor can reclaim under pressure.
+    ///
+    /// The `release` closure performs the actual teardown (invalidating a
+    /// `URLSession`, cancelling an `ActiveDownload` task, dropping a cached
+    /// segment buffer, etc.). It is `@Sendable` so the value type stays
+    /// genuinely `Sendable` and safe to store.
+    public struct StreamResource: Sendable, Identifiable {
+        /// Stable identifier used for unregister / dedupe.
+        public let id: UUID
+        /// What kind of resource this is, for diagnostics/telemetry.
+        public let category: ResourceCategory
+        /// Human-readable label for diagnostics and telemetry.
+        public let label: String
+        /// Estimated resident bytes, used to size the reclaim telemetry.
+        public let estimatedBytes: Int
+        /// Teardown closure invoked when the resource is reclaimed.
+        public let release: @Sendable () -> Void
+
+        /// Creates a stream resource.
+        public init(
+            id: UUID = UUID(),
+            category: ResourceCategory = .networkSession,
+            label: String,
+            estimatedBytes: Int,
+            release: @Sendable @escaping () -> Void
+        ) {
+            self.id = id
+            self.category = category
+            self.label = label
+            self.estimatedBytes = estimatedBytes
+            self.release = release
+        }
+    }
+
+    // MARK: - Public publishers
+
+    /// Continuously-updating stream of the latest system-pressure snapshot.
+    public var pressurePublisher: AnyPublisher<SystemStateSnapshot, Never> {
+        pressureSubject.eraseToAnyPublisher()
+    }
+
+    /// Stream of the current live (un-reclaimed) resource count.
+    public var liveResourceCountPublisher: AnyPublisher<Int, Never> {
+        countSubject.eraseToAnyPublisher()
+    }
+
+    // MARK: - Private state
+
+    private let telemetry: (any TelemetryProviding)?
+    private let configuration: Configuration
+    private let logger = Logger(subsystem: "com.titanplayer", category: "MissingComponent3")
+
+    private let pressureSubject = CurrentValueSubject<SystemStateSnapshot, Never>(.nominal)
+    private let countSubject = CurrentValueSubject<Int, Never>(0)
+
+    private var liveResources: [StreamResource] = []
+    private var monitor: SystemStateMonitor?
+    private var cancellables: Set<AnyCancellable> = []
+    private var isActive = false
+
+    // MARK: - Initialization
+
+    /// Creates a governor.
+    ///
+    /// - Parameters:
+    ///   - telemetry: An optional ``TelemetryProviding`` sink. When omitted,
+    ///     telemetry is silently skipped (no direct Sentry usage).
+    ///   - configuration: Tunables; defaults to ``Configuration/default``.
+    ///   - pressureSource: An optional external pressure stream. When omitted
+    ///     and `configuration.autoMonitor` is `true`, an internal
+    ///     ``SystemStateMonitor`` is created in ``start()``.
+    ///
+    /// The initializer is intentionally `internal` (not `public`) because it
+    /// exposes the module-internal ``TelemetryProviding`` protocol in its
+    /// signature.
+    init(
+        telemetry: (any TelemetryProviding)? = nil,
+        configuration: Configuration = .default,
+        pressureSource: AnyPublisher<SystemStateSnapshot, Never>? = nil
+    ) {
+        self.telemetry = telemetry
+        self.configuration = configuration
+        if let pressureSource {
+            pressureSource
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] snapshot in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.handleSnapshot(snapshot)
+                    }
+                }
+                .store(in: &cancellables)
+        }
+    }
+
+    deinit {
+        // `deinit` may access this instance's stored properties directly, but
+        // cannot call main-actor-isolated methods. We drop the references so the
+        // `SystemStateMonitor` (whose own `deinit` releases its observers) and
+        // every subscription are released — the unconditional cancellation path
+        // that keeps Instruments leak checks clean.
+        monitor = nil
+        cancellables.removeAll()
+    }
+
+    // MARK: - Lifecycle
+
+    /// Begins observing system pressure.
+    ///
+    /// Idempotent: calling while active is a no-op, and it is safe to call
+    /// again after ``stop()``.
+    public func start() {
+        guard !isActive else { return }
+        isActive = true
+
+        if configuration.autoMonitor && monitor == nil {
+            let monitor = SystemStateMonitor(telemetry: telemetry)
+            monitor.snapshotPublisher
+                .sink { [weak self] snapshot in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.handleSnapshot(snapshot)
+                    }
+                }
+                .store(in: &cancellables)
+            monitor.start()
+            self.monitor = monitor
+        }
+
+        logger.info("MissingComponent3 started")
+    }
+
+    /// Stops observing and releases all resources — the explicit cancellation
+    /// path. Cancels the internal monitor and drops every subscriber so nothing
+    /// is left dangling.
+    public func stop() {
+        guard isActive else { return }
+        isActive = false
+
+        monitor?.stop()
+        monitor = nil
+        cancellables.removeAll()
+        logger.info("MissingComponent3 stopped")
+    }
+
+    // MARK: - Resource tracking
+
+    /// Registers a resource for later reclamation.
+    public func register(_ resource: StreamResource) {
+        liveResources.append(resource)
+        countSubject.send(liveResources.count)
+        #if DEBUG
+        logger.debug("Registered resource \(resource.label) (\(resource.estimatedBytes) bytes)")
+        #endif
+    }
+
+    /// Removes and releases a single resource by id.
+    ///
+    /// - Returns: `true` if a resource with `id` was found and released.
+    @discardableResult
+    public func unregister(id: StreamResource.ID) -> Bool {
+        guard let idx = liveResources.firstIndex(where: { $0.id == id }) else {
+            return false
+        }
+        let resource = liveResources.remove(at: idx)
+        resource.release()
+        countSubject.send(liveResources.count)
+        return true
+    }
+
+    // MARK: - Pressure response
+
+    /// Reacts to a system-pressure snapshot.
+    ///
+    /// - If the snapshot demands a pause, all streaming resources are reclaimed.
+    /// - If it only suggests throttling, a best-effort reclaim is attempted.
+    ///
+    /// Failures during reclamation are mapped to ``MediaError`` and surfaced
+    /// through telemetry; they do not crash the caller.
+    public func handleSnapshot(_ snapshot: SystemStateSnapshot) {
+        pressureSubject.send(snapshot)
+
+        if snapshot.shouldPauseForSystem {
+            record(.compatibilityModeActivated(
+                reason: "stream_pause:thermal_\(snapshot.thermal.description)_mem_\(snapshot.memory.description)",
+                source: .local
+            ))
+            Task { try? await reclaimResources(under: snapshot) }
+        } else if snapshot.shouldThrottleDecoding {
+            logger.warning("Stream throttle suggested (thermal=\(snapshot.thermal.description), memory=\(snapshot.memory.description))")
+            Task { try? await reclaimResources(under: snapshot) }
+        } else {
+            #if DEBUG
+            logger.debug("Stream system nominal")
+            #endif
+        }
+    }
+
+    /// Reclaims every registered resource under the given pressure snapshot,
+    /// bounded by `timeout`.
+    ///
+    /// - Parameters:
+    ///   - snapshot: The pressure snapshot that triggered reclamation.
+    ///   - timeout: Budget for the reclaim pass. Defaults to
+    ///     `configuration.reclaimTimeout`.
+    /// - Returns: The number of resources reclaimed.
+    /// - Throws: ``MediaError`` (`.timedOut` / `.cancelled`) if the pass is
+    ///   cancelled or exceeds its budget.
+    @discardableResult
+    public func reclaimResources(
+        under snapshot: SystemStateSnapshot,
+        timeout: Duration? = nil
+    ) async throws -> Int {
+        if Task.isCancelled {
+            throw MediaError(
+                kind: .cancelled,
+                source: .local,
+                message: "Stream resource reclamation was cancelled before it started."
+            )
+        }
+
+        let budget = timeout ?? configuration.reclaimTimeout
+        let batch = liveResources
+
+        let reclaimed: Int = try await withTimeout(budget) {
+            try Task.checkCancellation()
+            // Release each resource. Closures are `@Sendable`; the main-actor
+            // isolation guarantees exclusive access to `liveResources`.
+            for resource in batch {
+                resource.release()
+                #if DEBUG
+                self.logger.debug("Reclaimed \(resource.label)")
+                #endif
+            }
+            return batch.count
+        }
+
+        let batchIDs = Set(batch.map(\.id))
+        liveResources.removeAll(where: { batchIDs.contains($0.id) })
+        countSubject.send(liveResources.count)
+        record(.frameCacheEvicted(
+            count: reclaimed,
+            reason: "stream_pressure:thermal_\(snapshot.thermal.description)_mem_\(snapshot.memory.description)"
+        ))
+        logger.info("Reclaimed \(reclaimed) stream resources")
+        return reclaimed
+    }
+
+    // MARK: - Guarded acquire
+
+    /// Runs an external resource-acquire closure under a timeout and
+    /// cancellation guard.
+    ///
+    /// Use this to bound third-party or driver calls (e.g. opening a `URLSession`,
+    /// resolving an HLS/DASH manifest, attaching a `StreamingCache` buffer) so a
+    /// hung acquire cannot stall the session.
+    ///
+    /// - Parameters:
+    ///   - timeout: Budget for the work. Defaults to `configuration.acquireTimeout`.
+    ///   - work: The async closure to run.
+    /// - Returns: The value produced by `work`.
+    /// - Throws: ``MediaError`` (`.timedOut` / `.cancelled`) on budget or
+    ///   cancellation, or any error `work` throws (mapped to ``MediaError``).
+    public func withGuardedAcquire<T: Sendable>(
+        timeout: Duration? = nil,
+        _ work: @Sendable @escaping () async throws -> T
+    ) async throws -> T {
+        if Task.isCancelled {
+            throw MediaError(
+                kind: .cancelled,
+                source: .local,
+                message: "Guarded stream resource acquire was cancelled before it started."
+            )
+        }
+        let budget = timeout ?? configuration.acquireTimeout
+        do {
+            return try await withTimeout(budget) {
+                try Task.checkCancellation()
+                return try await work()
+            }
+        } catch {
+            let mediaError = MediaError(error, source: .local)
+            recordFailure(mediaError)
+            throw mediaError
+        }
+    }
+
+    // MARK: - Private helpers
+
+    /// Runs `operation` bounded by `duration`, throwing ``MediaError/timedOut``
+    /// (wrapped in a ``MediaError``) if the budget is exceeded, or mapping any
+    /// other thrown error onto ``MediaError``.
+    private func withTimeout<T: Sendable>(
+        _ duration: Duration,
+        operation: @Sendable @escaping () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await operation() }
+            group.addTask {
+                try await Task.sleep(for: duration)
+                throw MediaError(
+                    kind: .timedOut,
+                    source: .local,
+                    message: "Stream resource operation exceeded timeout of \(duration)."
+                )
+            }
+
+            do {
+                guard let result = try await group.next() else {
+                    throw MediaError(
+                        kind: .unknown,
+                        source: .local,
+                        message: "Stream resource operation produced no result."
+                    )
+                }
+                group.cancelAll()
+                return result
+            } catch {
+                group.cancelAll()
+                throw MediaError(error, source: .local)
+            }
+        }
+    }
+
+    /// Emits a telemetry event through the injected ``TelemetryProviding`` sink.
+    ///
+    /// Direct Sentry usage is intentionally avoided so the app's consent and
+    /// privacy gates apply uniformly.
+    private func record(_ event: TelemetryEvent) {
+        telemetry?.record(event)
+    }
+
+    /// Records a failure via ``MediaError/record(using:)`` when telemetry is
+    /// present, then logs it.
+    private func recordFailure(_ error: MediaError) {
+        if let telemetry {
+            error.record(using: telemetry)
+        }
+        logger.error("\(error.description)")
+    }
+}

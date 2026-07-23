@@ -1,216 +1,110 @@
-import Foundation
+//
+//  MetalShaders.swift
+//  TitanPlayer
+//
+//  Metal shader library management with runtime compilation
+//  fallback and shader variant pre-compilation.
+//
+
 import Metal
 import os.log
 
-/// Loads Metal shader libraries, preferring pre-compiled `.metallib` bundles
-/// and falling back to runtime MSL compilation from bundled `.metal` sources.
-enum MetalShaders {
-    static let sourceFileNames = ["Common", "Video", "HDR", "Analysis", "Subtitle"]
-    static let resourceBundleName = "TitanPlayer_TitanPlayer.bundle"
-    
-    private static let logger = Logger(subsystem: "com.titanplayer", category: "MetalShaders")
+final class MetalShaderLibrary {
+    private let device: MTLDevice
+    private var library: MTLLibrary
+    private let logger = Logger(subsystem: "com.titanplayer.app", category: "MetalShaders")
 
-    /// Returns a Metal library for the device. Tries in order:
-    /// 1. Embedded default.metallib (linked by Xcode)
-    /// 2. Pre-compiled default.metallib in bundle resources
-    /// 3. Runtime compilation from bundled .metal sources (SwiftPM fallback)
-    static func loadLibrary(device: MTLDevice) -> MTLLibrary? {
-        // Try embedded default library first (Xcode builds)
-        if let lib = device.makeDefaultLibrary() {
-            logger.info("Loaded embedded default.metallib")
-            return lib
+    /// Pre-compiled function cache for shader variants.
+    private var functionCache: [String: MTLFunction] = [:]
+
+    init(device: MTLDevice) throws {
+        self.device = device
+
+        // Try default.metallib first (pre-compiled at build time)
+        if let defaultLibrary = try? device.makeDefaultLibrary() {
+            self.library = defaultLibrary
+            logger.info("MetalShaderLibrary: Loaded default.metallib")
+        } else {
+            // Fallback: compile from source at runtime
+            logger.warning("MetalShaderLibrary: No default.metallib, compiling from source")
+            self.library = try Self.compileSourceLibrary(device: device)
         }
-        
-        // Try loading pre-compiled default.metallib from bundle
-        if let lib = loadPrecompiledMetallib(device: device) {
-            logger.info("Loaded default.metallib from bundle resources")
-            return lib
+
+        // Pre-compile shader variants
+        precompileVariants()
+    }
+
+    /// Look up a function by name (with caching).
+    func makeFunction(named name: String) -> MTLFunction? {
+        if let cached = functionCache[name] {
+            return cached
         }
-        
-        // Fall back to runtime compilation from .metal sources
-        logger.warning("default.metallib not found, falling back to runtime shader compilation")
-        guard let source = loadCombinedSource() else {
-            logger.error("Failed to load any shader source files")
+
+        guard let function = library.makeFunction(name: name) else {
+            logger.error("MetalShaderLibrary: Function not found: \(name)")
             return nil
         }
-        
-        do {
-            let lib = try device.makeLibrary(source: source, options: nil)
-            logger.info("Successfully compiled shaders from source at runtime")
-            return lib
-        } catch {
-            logger.error("Runtime shader compilation failed: \(error.localizedDescription)")
-            return nil
-        }
+
+        functionCache[name] = function
+        return function
     }
 
-    // MARK: - Pre-compiled metallib loading
-
-    private static func loadPrecompiledMetallib(device: MTLDevice) -> MTLLibrary? {
-        guard let url = locateMetallib(named: "default") else {
-            logger.debug("default.metallib not found in any bundle location")
-            return nil
-        }
-        do {
-            let lib = try device.makeLibrary(URL: url)
-            logger.info("Loaded pre-compiled metallib from: \(url.path)")
-            return lib
-        } catch {
-            logger.error("Failed to load metallib from \(url.path): \(error.localizedDescription)")
-            return nil
-        }
-    }
-
-    private static func locateMetallib(named name: String) -> URL? {
-        let file = "\(name).metallib"
-        var candidates: [URL] = []
-        #if SWIFT_PACKAGE
-        if let m = Bundle.module.url(forResource: name, withExtension: "metallib") {
-            candidates.append(m)
-        }
-        #endif
-        for b in bundleNameURLs() {
-            candidates.append(b.appendingPathComponent(file))
-            candidates.append(b.appendingPathComponent("Contents/Resources").appendingPathComponent(file))
-            candidates.append(b.appendingPathComponent("Resources").appendingPathComponent(file))
-        }
-        for url in candidates where FileManager.default.fileExists(atPath: url.path) {
-            return url
-        }
-        return nil
-    }
-
-    // MARK: - Runtime source compilation (SwiftPM fallback)
-
-    private static func loadCombinedSource() -> String? {
-        var found = false
-        let preamble = "#include <metal_stdlib>\nusing namespace metal;\n"
-        var body = ""
-        for name in sourceFileNames {
-            guard let url = locateShaderFile(named: name) else {
-                logger.debug("Shader file not found: \(name).metal")
-                continue
-            }
-            guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
-                logger.warning("Failed to read shader file: \(url.path)")
-                continue
-            }
-            let stripped = stripRedundantHeaders(raw)
-            body += "\n// ----- \(name).metal -----\n" + stripped + "\n"
-            found = true
-            logger.debug("Loaded shader source: \(name).metal from \(url.path)")
-        }
-        guard found else { return nil }
-        let combined = preamble + body
-        let withForwardDecls = generateForwardDeclarations(combined)
-        return withForwardDecls
-    }
-
-    /// Parses the combined Metal source and generates forward declarations
-    /// for functions that are called before they are defined.
-    private static func generateForwardDeclarations(_ source: String) -> String {
-        let lines = source.components(separatedBy: .newlines)
-        var definedSymbols: Set<String> = []
-        var forwardDecls: [String] = []
-        let keywordPattern = #"^(?:static\s+inline\s+|inline\s+)?(?:float[234]|int[234]|uint[234]|half[234]|bool|void|float|int|uint|half|bool)\s+(\w+)\s*\("#
-
-        for line in lines {
-            if let range = line.range(of: keywordPattern, options: .regularExpression) {
-                let match = String(line[range])
-                if let nameRange = match.range(of: #"\b(\w+)\s*\("#, options: .regularExpression) {
-                    let nameMatch = String(match[nameRange])
-                    let name = nameMatch.replacingOccurrences(of: "(", with: "").trimmingCharacters(in: .whitespaces)
-                    definedSymbols.insert(name)
-                }
-            }
-        }
-
-        var calledBeforeDefined: Set<String> = []
-        var seenDefinitions: Set<String> = []
-        let callPattern = #"(\w+)\s*\("#
-
-        for line in lines {
-            if let range = line.range(of: keywordPattern, options: .regularExpression) {
-                let match = String(line[range])
-                if let nameRange = match.range(of: #"\b(\w+)\s*\("#, options: .regularExpression) {
-                    let nameMatch = String(match[nameRange])
-                    let name = nameMatch.replacingOccurrences(of: "(", with: "").trimmingCharacters(in: .whitespaces)
-                    seenDefinitions.insert(name)
-                }
-                continue
-            }
-
-            if let regex = try? NSRegularExpression(pattern: callPattern) {
-                let nsRange = NSRange(line.startIndex..<line.endIndex, in: line)
-                let matches = regex.matches(in: line, range: nsRange)
-                for m in matches {
-                    if let r = Range(m.range(at: 1), in: line) {
-                        let callee = String(line[r])
-                        if definedSymbols.contains(callee) && !seenDefinitions.contains(callee) {
-                            calledBeforeDefined.insert(callee)
-                        }
-                    }
-                }
-            }
-        }
-
-        if calledBeforeDefined.isEmpty { return source }
-
-        for name in calledBeforeDefined.sorted() {
-            forwardDecls.append("static inline float \(name)(/* see definition below */);")
-        }
-
-        let declBlock = "\n// ----- Auto-generated forward declarations -----\n" +
-            forwardDecls.joined(separator: "\n") + "\n"
-
-        if let insertPoint = source.range(of: "// ----- HDR forward decls -----\n") {
-            return source.replacingCharacters(in: insertPoint.lowerBound..<insertPoint.lowerBound, with: declBlock)
-        }
-        if let insertPoint = source.range(of: "// ----- HDR.metal -----") {
-            return source.replacingCharacters(in: insertPoint.lowerBound..<insertPoint.lowerBound, with: declBlock)
-        }
-        return declBlock + source
-    }
-
-    /// Strips `#include <metal_stdlib>` and `using namespace metal;` from
-    /// individual files since we emit them once in the preamble.
-    private static func stripRedundantHeaders(_ source: String) -> String {
-        var s = source
-        let patterns = [
-            "#include <metal_stdlib>\nusing namespace metal;",
-            "#include <metal_stdlib>",
-            "using namespace metal;"
+    /// Pre-compile all shader variants to avoid runtime compilation stalls.
+    private func precompileVariants() {
+        let variantNames = [
+            "video_vertex_shader",
+            "video_fragment_shader",
+            "ycbcr_to_rgb",
+            "hdr_tone_mapping",
+            "subtitle_vertex_shader",
+            "subtitle_fragment_shader",
         ]
-        for p in patterns {
-            s = s.replacingOccurrences(of: p, with: "")
+
+        for name in variantNames {
+            if let function = library.makeFunction(name: name) {
+                functionCache[name] = function
+                logger.info("MetalShaderLibrary: Pre-compiled \(name)")
+            } else {
+                logger.warning("MetalShaderLibrary: Variant not found: \(name)")
+            }
         }
-        return s.trimmingCharacters(in: .whitespacesAndNewlines) + "\n"
     }
 
-    private static func locateShaderFile(named name: String) -> URL? {
-        let file = "\(name).metal"
-        var candidates: [URL] = []
-        #if SWIFT_PACKAGE
-        if let m = Bundle.module.url(forResource: name, withExtension: "metal") {
-            candidates.append(m)
-        }
-        #endif
-        for b in bundleNameURLs() {
-            candidates.append(b.appendingPathComponent(file))
-            candidates.append(b.appendingPathComponent("Contents/Resources").appendingPathComponent(file))
-            candidates.append(b.appendingPathComponent("Resources").appendingPathComponent(file))
-        }
-        for url in candidates where FileManager.default.fileExists(atPath: url.path) {
-            return url
-        }
-        return nil
-    }
+    /// Compile shaders from .metal source files at runtime.
+    private static func compileSourceLibrary(device: MTLDevice) throws -> MTLLibrary {
+        let sourceFiles = ["Common.metal", "HDR.metal", "Video.metal", "Subtitle.metal"]
+        var allSource = ""
 
-    private static func bundleNameURLs() -> [URL] {
-        let main = Bundle.main.bundleURL
-        return [
-            main.appendingPathComponent(resourceBundleName),
-            main.appendingPathComponent("Contents/Resources").appendingPathComponent(resourceBundleName),
-        ]
+        for file in sourceFiles {
+            guard let url = Bundle.main.url(forResource: file, withExtension: nil),
+                  let source = try? String(contentsOf: url, encoding: .utf8) else {
+                continue
+            }
+            allSource += source + "\n"
+        }
+
+        guard !allSource.isEmpty else {
+            throw MetalShaderError.noSourceFiles
+        }
+
+        do {
+            return try device.makeLibrary(source: allSource, options: nil)
+        } catch {
+            throw MetalShaderError.compilationFailed(error.localizedDescription)
+        }
+    }
+}
+
+enum MetalShaderError: LocalizedError {
+    case noSourceFiles
+    case compilationFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .noSourceFiles:
+            return "No Metal source files found in bundle"
+        case .compilationFailed(let reason):
+            return "Shader compilation failed: \(reason)"
+        }
     }
 }

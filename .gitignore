@@ -38,3 +38,14 @@ fastlane/test_output
 
 # Secrets (never commit)
 TitanPlayer/Config/Secrets.xcconfig
+
+# Local development files
+.prompt_progress.json
+__pycache__/
+*.pyc
+logs/
+*.log
+
+# Generated docs
+docs/combined.html
+docs/src/

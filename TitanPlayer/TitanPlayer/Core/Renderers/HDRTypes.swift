@@ -134,7 +134,27 @@ struct DolbyVisionMetadata: Equatable {
     let blVideoSignalInfo: DolbyVisionVideoSignalInfo
     let elVideoSignalInfo: DolbyVisionVideoSignalInfo?
     let rpuMetadata: DolbyVisionRPUMetadata
-    
+
+    /// A conservative, valid DV descriptor used when only the DV *presence*
+    /// (e.g. a format-description extension) is known and the full RPU has not
+    /// yet been parsed. Passthrough scaling still engages with this payload.
+    static let placeholder = DolbyVisionMetadata(
+        profile: .profile8,
+        blVideoSignalInfo: DolbyVisionVideoSignalInfo(
+            colorSpace: .bt2020,
+            transferCharacteristic: .pq,
+            colorPrimaries: .bt2020
+        ),
+        elVideoSignalInfo: nil,
+        rpuMetadata: DolbyVisionRPUMetadata(
+            sceneRefreshFlag: false,
+            targetDisplayMaxLuminance: 1000,
+            targetDisplayMinLuminance: 0,
+            trimPasses: [],
+            activeAreaOffsets: nil
+        )
+    )
+
     static func == (lhs: DolbyVisionMetadata, rhs: DolbyVisionMetadata) -> Bool {
         lhs.profile == rhs.profile &&
         lhs.blVideoSignalInfo == rhs.blVideoSignalInfo &&

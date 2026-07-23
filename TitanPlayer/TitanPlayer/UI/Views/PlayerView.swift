@@ -106,15 +106,7 @@ struct PlayerView: View {
         }
         .fileImporter(
             isPresented: $showingFileImporter,
-            allowedContentTypes: [
-                .movie, .video, .mpeg4Movie, .quickTimeMovie,
-                .avi, .mpeg2Video,
-                .audio, .mp3, .wav, .aiff,
-                UTType(filenameExtension: "m3u8") ?? .data,
-                UTType(filenameExtension: "mkv") ?? .data,
-                UTType(filenameExtension: "webm") ?? .data,
-                UTType(filenameExtension: "flac") ?? .data,
-            ],
+            allowedContentTypes: SupportedMediaTypes.filePickerTypes,
             allowsMultipleSelection: false
         ) { result in
             handleFileImporterResult(result)
@@ -212,15 +204,7 @@ struct VideoContentView: View {
         }
         .fileImporter(
             isPresented: $showingFileImporter,
-            allowedContentTypes: [
-                .movie, .video, .mpeg4Movie, .quickTimeMovie,
-                .avi, .mpeg2Video,
-                .audio, .mp3, .wav, .aiff,
-                UTType(filenameExtension: "m3u8") ?? .data,
-                UTType(filenameExtension: "mkv") ?? .data,
-                UTType(filenameExtension: "webm") ?? .data,
-                UTType(filenameExtension: "flac") ?? .data,
-            ],
+            allowedContentTypes: SupportedMediaTypes.filePickerTypes,
             allowsMultipleSelection: false
         ) { result in
             switch result {
